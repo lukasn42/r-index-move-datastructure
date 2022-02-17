@@ -1,0 +1,3 @@
+[submodule "external/move-datastructure"]
+	path = external/move-datastructure
+	url = https://github.com/lukasn42/move-datastructure.git
