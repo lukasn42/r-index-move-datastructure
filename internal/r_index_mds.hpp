@@ -111,7 +111,7 @@ public:
 			}
 
 			if (log) cout << "building move datastructure for LF" << endl;
-			mds_LF = mds<uint32_t>(I_LF,n,4,2,p,version,log);
+			mds_LF = mds<uint32_t>(I_LF,n,2,p,version,log);
 			I_LF = NULL;
 			r = mds_LF.intervals();
 			if (log) cout << "r = " << r << endl;
@@ -145,7 +145,7 @@ public:
         }
 
 		if (log) cout << "builing move datastructure for phi" << endl;
-		mds_phi = mds<uint32_t>(I_phi,n,4,2,p,version,log);
+		mds_phi = mds<uint32_t>(I_phi,n,2,p,version,log);
 		I_phi = NULL;
 
 		if (log) cout << "calculating SA-Sample indices" << endl;
