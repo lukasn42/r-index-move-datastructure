@@ -1,5 +1,11 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION "3.16.3")
 set (CMAKE_CXX_STANDARD 20)
+
+CMAKE_POLICY(SET CMP0081 NEW)
+CMAKE_POLICY(SET CMP0015 NEW)
+CMAKE_POLICY(SET CMP0048 NEW)
+
+SET(IPS4O_USE_OPENMP ON)
 
 # Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE)
@@ -15,8 +21,6 @@ include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/internal)
 include_directories(sdsl/include) #SDSL headers are here
 
-CMAKE_POLICY(SET CMP0081 NEW)
-CMAKE_POLICY(SET CMP0015 NEW)
 LINK_DIRECTORIES(sdsl/lib) #SDSL lib are here
 
 find_package(OpenMP)

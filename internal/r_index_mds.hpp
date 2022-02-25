@@ -45,132 +45,104 @@ public:
 	 */
 	r_index_mds(string T, int32_t length, int p, int version = 3, bool log = true){
 		n = length;
-		if (log) cout << endl << "n = " << n << endl;
+		omp_set_num_threads(p);
 
-		if (log) cout << "calculating SA" << endl;
-		std::vector<int32_t> SA(n);
-		if (p > 1) {
-			libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL,p);
-		} else {
-			libsais((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL);
-		}
-
-		if (log) cout << "calculating bwt" << endl;
-		string bwt_s;
-		bwt_s.resize(n);
-		#pragma omp parallel for num_threads(p)
-		for (int i=0; i<n; i++) {
-			bwt_s[i] = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
-		}
-
-		if (log) cout << "calculating F" << endl;
-		F = vector<ulint>(256,0);
-		#pragma omp parallel for num_threads(p)
-		for(uchar c : bwt_s) {
-			#pragma omp atomic
-			F[c]++;
-		}
-		for(ulint i=255;i>0;--i) {
-			F[i] = F[i-1];
-		}
-		F[0] = 0;
-		for(ulint i=1;i<256;++i) {
-			F[i] += F[i-1];
-		}
-		#pragma omp parallel for num_threads(p)
-		for(ulint i=0;i<bwt_s.size();++i) {
-			if(bwt_s[i]==TERMINATOR) {
-				terminator_position = i;
-			}
-		}
-
-		std::vector<uint32_t> run_start_positions;
-		std::vector<std::pair<uint32_t,uint32_t>> *I_phi;
 		{
-			if (log) cout << "calculating run start positions" << endl;
-			run_start_positions.reserve(n);
-			run_start_positions.push_back(0);
-			for (int i=1; i<n; i++) {
-				if (bwt_s[i] != bwt_s[i-1]) {
-					run_start_positions.push_back(i);
-				}
+			if (log) cout << "calculating SA" << endl;
+			std::vector<int32_t> SA(n);
+			if (p > 1) {
+				libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL,p);
+			} else {
+				libsais((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL);
 			}
-			r = run_start_positions.size();
-			if (log) cout << "r = " << r << endl;
 
-			if (log) cout << "calculating LF-Array" << endl;
-			std::vector<std::pair<uint32_t,uint32_t>> *I_LF = new std::vector<std::pair<uint32_t,uint32_t>>(r);
+			if (log) cout << "calculating C" << endl;
+			std::vector<uint32_t> C(256,0);
+			#pragma omp parallel for num_threads(p)
+			for(int i=0; i<n; i++) {
+				#pragma omp atomic
+				C[SA[i] == 0 ? T[n-1] : T[SA[i]-1]]++;
+			}
+			for(uint32_t i=255;i>0;--i) {
+				C[i] = C[i-1];
+			}
+			C[0] = 0;
+			for(uint32_t i=1;i<256;++i) {
+				C[i] += C[i-1];
+			}
+
 			{
-				int_vector<64> F_(256,0);
-				uchar c;
-				for (uint32_t i=0; i<r; i++) {
-					c = bwt_s[run_start_positions[i]];
-					I_LF->at(i) = std::make_pair(run_start_positions[i],F[c]+F_[c]);
-					F_[c] += run_start_positions[i+1] - run_start_positions[i];
+				if (log) cout << "calculating LF-Array" << endl;
+				std::vector<std::pair<uint32_t,uint32_t>> *I_LF = new std::vector<std::pair<uint32_t,uint32_t>>();
+				{
+					std::vector<uint32_t> C_(256,0);
+					uint32_t l = 0;
+					uint8_t c = SA[0] == 0 ? T[n-1] : T[SA[0]-1];
+					I_LF->emplace_back(std::make_pair(0,C[c]));
+					for (uint32_t i=1; i<n; i++) {
+						if (SA[i] == 0 ? T[n-1] : T[SA[i]-1] != c) {
+							C_[c] += i-l;
+							l = i;
+							c = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
+							I_LF->emplace_back(std::make_pair(i,C[c]+C_[c]));
+						}
+					}
 				}
+				C.resize(0);
+
+				if (log) cout << "building move datastructure for LF" << endl;
+				mds_LF = mds<uint32_t>(I_LF,n,2,p,version,log);
+				r = mds_LF.intervals();
 			}
 
-			if (log) cout << "building move datastructure for LF" << endl;
-			mds_LF = mds<uint32_t>(I_LF,n,2,p,version,log);
-			I_LF = NULL;
-			r = mds_LF.intervals();
-			if (log) cout << "r = " << r << endl;
+			{
+				if (log) cout << "building phi-Array and SA-Samples" << endl;
+				SA_sampl = std::vector<uint32_t>(r);
+				std::vector<std::pair<uint32_t,uint32_t>> *I_phi = new std::vector<std::pair<uint32_t,uint32_t>>(r);
+				SA_sampl[r-1] = SA[n-1];
+				I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
+				#pragma omp parallel for num_threads(p)
+				for (uint32_t i=1; i<r; i++) {
+					I_phi->at(i) = std::make_pair(SA[mds_LF.pair(i).first],SA[mds_LF.pair(i).first-1]);
+					SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
+				}
 
-			if (log) cout << "adjusting run start positions" << endl;
-			run_start_positions.resize(r);
-			run_start_positions.shrink_to_fit();
-			#pragma omp parallel for num_threads(p)
-			for (uint32_t i=0; i<r; i++) {
-				run_start_positions[i] = mds_LF.pair(i).first;
-			}
-
-			if (log) cout << "building phi-Array and SA-Samples" << endl;
-			SA_sampl = int_vector<32>(r);
-			I_phi = new std::vector<std::pair<uint32_t,uint32_t>>(r);
-			SA_sampl[r-1] = SA[n-1];
-			I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
-			#pragma omp parallel for num_threads(p)
-			for (uint32_t i=1; i<r; i++) {
-				I_phi->at(i) = std::make_pair(SA[run_start_positions[i]],SA[run_start_positions[i]-1]);
-				SA_sampl[i-1] = SA[run_start_positions[i]-1];
-			}
-		}
-
-		if (log) cout << "sorting phi-Array" << endl;
-		auto comp = [](auto p1, auto p2){return p1.first < p2.first;};
-		if (p > 1) {
-            ips4o::parallel::sort(I_phi->begin(),I_phi->end(),comp);
-        } else {
-            ips4o::sort(I_phi->begin(),I_phi->end(),comp);
-        }
-
-		if (log) cout << "builing move datastructure for phi" << endl;
-		mds_phi = mds<uint32_t>(I_phi,n,2,p,version,log);
-		I_phi = NULL;
-
-		if (log) cout << "calculating SA-Sample indices" << endl;
-		SA_sampl_idx = int_vector<32>(r);
-		#pragma omp parallel for num_threads(p)
-		for (int i=0; i<r; i++) {
-			uint32_t b = 0;
-			uint32_t e = mds_phi.intervals()-1;
-			uint32_t m;
-			while (b != e) {
-				m = (b+e)/2+1;
-				if (mds_phi.pair(m).first > SA_sampl[i]) {
-					e = m-1;
+				if (log) cout << "sorting phi-Array" << endl;
+				auto comp = [](auto p1, auto p2){return p1.first < p2.first;};
+				if (p > 1) {
+					ips4o::parallel::sort(I_phi->begin(),I_phi->end(),comp);
 				} else {
-					b = m;
+					ips4o::sort(I_phi->begin(),I_phi->end(),comp);
 				}
-			}
-			SA_sampl_idx[i] = b;
-		}
 
-		if (log) cout << "run-length encoding bwt" << endl;
-		bwt_rh_s.resize(r);
-		#pragma omp parallel for num_threads(p)
-		for (int i=0; i<r; i++) {
-			bwt_rh_s[i] = bwt_s[run_start_positions[i]];
+				if (log) cout << "builing move datastructure for phi" << endl;
+				mds_phi = mds<uint32_t>(I_phi,n,2,p,version,log);
+			}
+
+			if (log) cout << "calculating SA-Sample indices" << endl;
+			SA_sampl_idx = std::vector<uint32_t>(r);
+			#pragma omp parallel for num_threads(p)
+			for (int i=0; i<r; i++) {
+				uint32_t b = 0;
+				uint32_t e = mds_phi.intervals()-1;
+				uint32_t m;
+				while (b != e) {
+					m = (b+e)/2+1;
+					if (mds_phi.pair(m).first > SA_sampl[i]) {
+						e = m-1;
+					} else {
+						b = m;
+					}
+				}
+				SA_sampl_idx[i] = b;
+			}
+
+			if (log) cout << "run-length encoding bwt" << endl;
+			bwt_rh_s.resize(r);
+			#pragma omp parallel for num_threads(p)
+			for (int i=0; i<r; i++) {
+				bwt_rh_s[i] = SA[mds_LF.pair(i).first] == 0 ? T[n-1] : T[SA[mds_LF.pair(i).first]-1];
+			}
 		}
 		bwt_rh = huff_string(bwt_rh_s);
 	}
@@ -281,19 +253,13 @@ public:
 		out.write((char*)&n,sizeof(int32_t));
 		w_bytes += sizeof(int32_t);
 
-		out.write((char*)&r,sizeof(ulint));
-		w_bytes += sizeof(ulint);
-
-		out.write((char*)&terminator_position,sizeof(ulint));
-		w_bytes += sizeof(ulint);
+		out.write((char*)&r,sizeof(uint32_t));
+		w_bytes += sizeof(uint32_t);
 
 		w_bytes += bwt_rh.serialize(out);
 
 		out.write((char*)&bwt_rh_s[0],r);
 		w_bytes += r;
-
-		out.write((char*)F.data(),256*sizeof(ulint));
-		w_bytes += 256*sizeof(ulint);
 
 		out.write((char*)&SA_sampl[0],r*sizeof(uint32_t));
 		w_bytes += r*sizeof(uint32_t);
@@ -314,22 +280,17 @@ public:
 	void load(std::istream& in) {
 		in.read((char*)&n,sizeof(int32_t));
 
-		in.read((char*)&r,sizeof(ulint));
-
-		in.read((char*)&terminator_position,sizeof(ulint));
+		in.read((char*)&r,sizeof(uint32_t));
 
 		bwt_rh.load(in);
 
 		bwt_rh_s.resize(r);
 		in.read((char*)&bwt_rh_s[0],r);
 
-		F = vector<ulint>(256);
-		in.read((char*)&F[0],256*sizeof(ulint));
-
-		SA_sampl = int_vector<32>(r);
+		SA_sampl = std::vector<uint32_t>(r);
 		in.read((char*)&SA_sampl[0],r*sizeof(uint32_t));
 
-		SA_sampl_idx = int_vector<32>(r);
+		SA_sampl_idx = std::vector<uint32_t>(r);
 		in.read((char*)&SA_sampl_idx[0],r*sizeof(uint32_t));
 
 		mds_LF = mds<uint32_t>(in);
@@ -374,11 +335,9 @@ private:
 	huff_string bwt_rh;
 	string bwt_rh_s;
 	int32_t n;
-	ulint r;
-	ulint terminator_position;
-	vector<ulint> F;
-	int_vector<32> SA_sampl;
-	int_vector<32> SA_sampl_idx;
+	uint32_t r;
+	std::vector<uint32_t> SA_sampl;
+	std::vector<uint32_t> SA_sampl_idx;
 	mds<uint32_t> mds_LF;
 	mds<uint32_t> mds_phi;
 };
