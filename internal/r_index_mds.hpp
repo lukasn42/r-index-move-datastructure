@@ -96,17 +96,13 @@ public:
 			}
 
 			{
-				if (log) cout << "building phi-Array and SA-Samples" << endl;
-				SA_sampl = std::vector<uint32_t>(r);
+				if (log) cout << "building phi-Array" << endl;
 				std::vector<std::pair<uint32_t,uint32_t>> *I_phi = new std::vector<std::pair<uint32_t,uint32_t>>(r);
-				SA_sampl[r-1] = SA[n-1];
 				I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
 				#pragma omp parallel for num_threads(p)
 				for (uint32_t i=1; i<r; i++) {
 					I_phi->at(i) = std::make_pair(SA[mds_LF.pair(i).first],SA[mds_LF.pair(i).first-1]);
-					SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
 				}
-
 				if (log) cout << "sorting phi-Array" << endl;
 				auto comp = [](auto p1, auto p2){return p1.first < p2.first;};
 				if (p > 1) {
@@ -117,6 +113,14 @@ public:
 
 				if (log) cout << "builing move datastructure for phi" << endl;
 				mds_phi = mds<uint32_t>(I_phi,n,2,p,version,log);
+			}
+
+			if (log) cout << "building SA-Samples" << endl;
+			SA_sampl = std::vector<uint32_t>(r);
+			SA_sampl[r-1] = SA[n-1];
+			#pragma omp parallel for num_threads(p)
+			for (uint32_t i=1; i<r; i++) {
+				SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
 			}
 
 			if (log) cout << "calculating SA-Sample indices" << endl;
