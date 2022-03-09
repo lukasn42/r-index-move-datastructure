@@ -33,8 +33,8 @@ message("Building in ${CMAKE_BUILD_TYPE} mode")
 #set(CMAKE_CXX_FLAGS "--std=c++11")
 
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb -g")
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -fstrict-aliasing -funroll-loops -finline-functions -march=native")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -ggdb -OFast -fstrict-aliasing -march=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -fstrict-aliasing -ftree-vectorize -funroll-loops -finline-functions -march=native")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-ggdb3 -Wall -Wextra -march=native -fstrict-aliasing")
 
 add_executable(ri-mds-build ri-mds-build.cpp)
 TARGET_LINK_LIBRARIES(ri-mds-build sdsl)

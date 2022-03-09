@@ -13,6 +13,8 @@ string out_basename=string();
 string input_file=string();
 int sa_rate = 512;
 int p = omp_get_max_threads();
+int a = 8;
+int v = 3;
 ulint T = 0;//Build fast index with SA rate = T
 bool fast = false;//build fast index
 bool hyb = false; //use hybrid bitvectors instead of sd_vectors?
@@ -27,7 +29,9 @@ void help(){
 	//cout << "                        small index is built (O(occ*log(n/r))-time locate, O(r) words of space)"<<endl;
 	//cout << "   -sa_rate <T>         T>0. if used, build the fast index (see option -fast) storing T SA samples before and after each"<<endl;
 	//cout << "                        BWT equal-letter run. O(r*T) words of space, O(occ(log(n/r)/T) + log(n/r))-time locate. "<<endl;
-	cout << "   -p                   number of threads to use (default: all threads)"<<endl;
+	cout << "   -p                   number of threads to use (1 for v=1/2, 1<=p for v=3, 2<=p for v=4) (default: all threads)"<<endl;
+	cout << "   -a                   balancing parameter, restricts size to O(r*(1+1/(a-1))^2) (default: 8)"<<endl;
+	cout << "   -v                   balancing algorithm, (1/2/3/4) (default: 3)"<<endl;
 	cout << "   <input_file_name>    input text file." << endl;
 	exit(0);
 }
@@ -59,6 +63,26 @@ void parse_args(char** argv, int argc, int &ptr){
 		p = atoi(argv[ptr]);
 		ptr++;
 
+	}else if(s.compare("-a")==0){
+
+		if(ptr>=argc-1){
+			cout << "Error: missing parameter after -o option." << endl;
+			help();
+		}
+
+		a = atoi(argv[ptr]);
+		ptr++;
+
+	}else if(s.compare("-v")==0){
+
+		if(ptr>=argc-1){
+			cout << "Error: missing parameter after -o option." << endl;
+			help();
+		}
+
+		v = atoi(argv[ptr]);
+		ptr++;
+
 	}/*else if(s.compare("-h")==0){
 
 		hyb=true;
@@ -84,6 +108,13 @@ void parse_args(char** argv, int argc, int &ptr){
 		help();
 	}
 
+	if (!(
+		1 <= p && p <= omp_get_max_threads() &&
+		((v == 1 && p == 1) || (v == 2 && p == 1) || v == 3 || (v == 4 && 2 <= p))
+	)) {
+		cout << "Error: incompatible combination of threads and balancing algorithm" << endl;
+		help();
+	}
 }
 
 int main(int argc, char** argv){
@@ -145,7 +176,7 @@ int main(int argc, char** argv){
 
 	}else{
 
-		auto idx = r_index_mds<>(T,n,p);
+		auto idx = r_index_mds<>(T,n,p,v,a);
 		idx.serialize(out);
 
 	}

@@ -43,55 +43,63 @@ public:
 	/*
 	 * Build index
 	 */
-	r_index_mds(string T, int32_t length, int p, int version = 3, bool log = true){
+	r_index_mds(string T, int32_t length, int p, int version = 3, int a = 8, bool log = true){
 		n = length;
 		omp_set_num_threads(p);
 
 		{
-			if (log) cout << "calculating SA" << endl;
+			if (log) cout << "building SA" << endl;
 			std::vector<int32_t> SA(n);
 			if (p > 1) {
 				libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL,p);
 			} else {
 				libsais((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL);
 			}
-
-			if (log) cout << "calculating C" << endl;
-			std::vector<uint32_t> C(256,0);
+			if (log) cout << "building bwt" << endl;
+			string bwt;
+			bwt.resize(n);
 			#pragma omp parallel for num_threads(p)
 			for(int i=0; i<n; i++) {
-				#pragma omp atomic
-				C[SA[i] == 0 ? T[n-1] : T[SA[i]-1]]++;
+				bwt[i] = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
 			}
-			for(uint32_t i=255;i>0;--i) {
+			T.clear();
+
+			if (log) cout << "building C" << endl;
+			std::vector<uint32_t> C(256,0);
+			for (int i=0; i<n; i++) {
+				C[bwt[i]]++;
+			}
+			for (int i=255; i>0; i--) {
 				C[i] = C[i-1];
 			}
 			C[0] = 0;
-			for(uint32_t i=1;i<256;++i) {
+			for (int i=1; i<256; i++) {
 				C[i] += C[i-1];
 			}
 
 			{
-				if (log) cout << "calculating LF-Array" << endl;
+				if (log) cout << "building LF-Array" << endl;
 				std::vector<std::pair<uint32_t,uint32_t>> *I_LF = new std::vector<std::pair<uint32_t,uint32_t>>();
+				I_LF->reserve(n/16);
 				{
 					std::vector<uint32_t> C_(256,0);
 					uint32_t l = 0;
-					uint8_t c = SA[0] == 0 ? T[n-1] : T[SA[0]-1];
+					uint8_t c = bwt[0];
 					I_LF->emplace_back(std::make_pair(0,C[c]));
 					for (uint32_t i=1; i<n; i++) {
-						if (SA[i] == 0 ? T[n-1] : T[SA[i]-1] != c) {
+						if (bwt[i] != c) {
 							C_[c] += i-l;
 							l = i;
-							c = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
+							c = bwt[i];
 							I_LF->emplace_back(std::make_pair(i,C[c]+C_[c]));
 						}
 					}
 				}
-				C.resize(0);
+				I_LF->shrink_to_fit();
+				C.clear();
 
 				if (log) cout << "building move datastructure for LF" << endl;
-				mds_LF = mds<uint32_t>(I_LF,n,2,p,version,log);
+				mds_LF = mds<uint32_t>(I_LF,n,a,p,version,log);
 				r = mds_LF.intervals();
 			}
 
@@ -112,18 +120,22 @@ public:
 				}
 
 				if (log) cout << "builing move datastructure for phi" << endl;
-				mds_phi = mds<uint32_t>(I_phi,n,2,p,version,log);
+				mds_phi = mds<uint32_t>(I_phi,n,a,p,version,log);
 			}
 
-			if (log) cout << "building SA-Samples" << endl;
+			if (log) cout << "building SA-Samples and run-length-bwt" << endl;
 			SA_sampl = std::vector<uint32_t>(r);
+			bwt_rh_s.resize(r);
 			SA_sampl[r-1] = SA[n-1];
 			#pragma omp parallel for num_threads(p)
 			for (uint32_t i=1; i<r; i++) {
 				SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
+				bwt_rh_s[i] = bwt[mds_LF.pair(i).first];
 			}
+			SA.clear();
+			bwt.clear();
 
-			if (log) cout << "calculating SA-Sample indices" << endl;
+			if (log) cout << "building SA-Sample indices" << endl;
 			SA_sampl_idx = std::vector<uint32_t>(r);
 			#pragma omp parallel for num_threads(p)
 			for (int i=0; i<r; i++) {
@@ -140,14 +152,8 @@ public:
 				}
 				SA_sampl_idx[i] = b;
 			}
-
-			if (log) cout << "run-length encoding bwt" << endl;
-			bwt_rh_s.resize(r);
-			#pragma omp parallel for num_threads(p)
-			for (int i=0; i<r; i++) {
-				bwt_rh_s[i] = SA[mds_LF.pair(i).first] == 0 ? T[n-1] : T[SA[mds_LF.pair(i).first]-1];
-			}
 		}
+		if (log) cout << "buildung wavelet tree of run-length-bwt" << endl;
 		bwt_rh = huff_string(bwt_rh_s);
 	}
 
