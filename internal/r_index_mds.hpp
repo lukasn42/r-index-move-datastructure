@@ -139,7 +139,7 @@ public:
 				uint32_t b,m,e;
 
 				b = 0;
-				e = r-1;
+				e = mds_phi.intervals()-1;
 				while (b != e) {
 					m = (b+e)/2+1;
 					if (mds_phi.pair(m).first > SA[n-1]) {
@@ -148,7 +148,7 @@ public:
 						b = m;
 					}
 				}
-				mp_sa_start = std::make_pair(SA[n-1],b);
+				mp_sa_r_start = std::make_pair(SA[n-1],b);
 			}
 		}
 
@@ -232,7 +232,7 @@ public:
 
 		std::pair<uint32_t,uint32_t> mp_l(0,0);
 		std::pair<uint32_t,uint32_t> mp_r(n-1,r-1);
-		std::pair<uint32_t,uint32_t> mp_sa_r = mp_sa_start;
+		std::pair<uint32_t,uint32_t> mp_sa_r = mp_sa_r_start;
 
 		for (int i=m-1; i>=0; i--) {
 			if (P[i] != bwt_rh_s[mp_l.second]) {
@@ -297,7 +297,7 @@ public:
 		
 		w_bytes += mds_phi.serialize(out);
 
-		out.write((char*)&mp_sa_start,2*sizeof(uint32_t));
+		out.write((char*)&mp_sa_r_start,2*sizeof(uint32_t));
 		w_bytes += 2*sizeof(uint32_t);
 
 		return w_bytes;
@@ -326,7 +326,7 @@ public:
 
 		mds_phi = mds<uint32_t>(in);
 
-		in.read((char*)&mp_sa_start,2*sizeof(uint32_t));
+		in.read((char*)&mp_sa_r_start,2*sizeof(uint32_t));
 	}
 
 	/*
@@ -371,7 +371,7 @@ private:
 	std::vector<uint32_t> SA_sampl_idx;
 	mds<uint32_t> mds_LF;
 	mds<uint32_t> mds_phi;
-	std::pair<uint32_t,uint32_t> mp_sa_start;
+	std::pair<uint32_t,uint32_t> mp_sa_r_start;
 };
 
 }
