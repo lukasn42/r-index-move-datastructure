@@ -133,26 +133,10 @@ public:
 				SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
 				bwt_rh_s[i] = bwt[mds_LF.pair(i).first];
 			}
-			
-			// find the input interval in mds_phi containing SA[n-1]
-			{
-				uint32_t b,m,e;
+			SA.clear();
+			bwt.clear();
 
-				b = 0;
-				e = r-1;
-				while (b != e) {
-					m = (b+e)/2+1;
-					if (mds_phi.pair(m).first > SA[n-1]) {
-						e = m-1;
-					} else {
-						b = m;
-					}
-				}
-				mp_sa_start = std::make_pair(SA[n-1],b);
-			}
-		}
-
-		if (log) cout << "building SA-Sample indices" << endl;
+			if (log) cout << "building SA-Sample indices" << endl;
 			SA_sampl_idx = std::vector<uint32_t>(r);
 			#pragma omp parallel for num_threads(p)
 			for (int i=0; i<r; i++) {
@@ -169,6 +153,7 @@ public:
 				}
 				SA_sampl_idx[i] = b;
 			}
+		}
 		if (log) cout << "buildung wavelet tree of run-length-bwt" << endl;
 		bwt_rh = huff_string(bwt_rh_s);
 	}
@@ -232,7 +217,7 @@ public:
 
 		std::pair<uint32_t,uint32_t> mp_l(0,0);
 		std::pair<uint32_t,uint32_t> mp_r(n-1,r-1);
-		std::pair<uint32_t,uint32_t> mp_sa_r = mp_sa_start;
+		std::pair<uint32_t,uint32_t> mp_sa_r(SA_sampl[r-1],SA_sampl_idx[r-1]);
 
 		for (int i=m-1; i>=0; i--) {
 			if (P[i] != bwt_rh_s[mp_l.second]) {
@@ -297,9 +282,6 @@ public:
 		
 		w_bytes += mds_phi.serialize(out);
 
-		out.write((char*)&mp_sa_start,2*sizeof(uint32_t));
-		w_bytes += 2*sizeof(uint32_t);
-
 		return w_bytes;
 	}
 
@@ -325,8 +307,6 @@ public:
 		mds_LF = mds<uint32_t>(in);
 
 		mds_phi = mds<uint32_t>(in);
-
-		in.read((char*)&mp_sa_start,2*sizeof(uint32_t));
 	}
 
 	/*
@@ -371,7 +351,6 @@ private:
 	std::vector<uint32_t> SA_sampl_idx;
 	mds<uint32_t> mds_LF;
 	mds<uint32_t> mds_phi;
-	std::pair<uint32_t,uint32_t> mp_sa_start;
 };
 
 }
