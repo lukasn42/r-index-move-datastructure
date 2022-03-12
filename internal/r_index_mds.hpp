@@ -66,8 +66,8 @@ public:
 
 			if (log) cout << "building C" << endl;
 			std::vector<uint32_t> C(256,0);
-			for (uchar c : bwt) {
-				C[c]++;
+			for (int i=0; i<n; i++) {
+				C[bwt[i]]++;
 			}
 			for (int i=255; i>0; i--) {
 				C[i] = C[i-1];
@@ -126,7 +126,6 @@ public:
 			if (log) cout << "building SA-Samples and run-length-bwt" << endl;
 			SA_sampl = std::vector<uint32_t>(r);
 			bwt_rh_s.resize(r);
-			bwt_rh_s[0] = bwt[0];
 			SA_sampl[r-1] = SA[n-1];
 			#pragma omp parallel for num_threads(p)
 			for (uint32_t i=1; i<r; i++) {
