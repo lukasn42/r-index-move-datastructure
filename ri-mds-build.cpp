@@ -2,9 +2,10 @@
 
 #include <omp.h>
 
-#include "internal/r_index_mds.hpp"
 #include "utils.hpp"
+
 #include "internal/r_index_mds.hpp"
+
 
 using namespace ri_mds;
 using namespace std;
@@ -149,7 +150,7 @@ int main(int argc, char** argv){
 	cout << "Index will be saved to " << idx_file << endl;
 
 	string T;
-	int32_t n;
+	uint64_t n;
 
 	{
 		std::ifstream file(input_file);
@@ -176,8 +177,15 @@ int main(int argc, char** argv){
 
 	}else{
 
-		auto idx = r_index_mds<>(T,n,p,v,a);
-		idx.serialize(out);
+		if (n <= INT_MAX) {
+			out << false;
+			auto idx = r_index_mds<uint32_t>(T,(uint32_t)n,p,v,a);
+			idx.serialize(out);
+		} else {
+			out << true;
+			auto idx = r_index_mds<uint64_t>(T,n,p,v,a);
+			idx.serialize(out);
+		}
 
 	}
 

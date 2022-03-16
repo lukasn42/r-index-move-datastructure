@@ -5,8 +5,6 @@ CMAKE_POLICY(SET CMP0081 NEW)
 CMAKE_POLICY(SET CMP0015 NEW)
 CMAKE_POLICY(SET CMP0048 NEW)
 
-SET(IPS4O_USE_OPENMP ON)
-
 # Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Setting build type to 'Release' as none was specified.")
@@ -64,3 +62,5 @@ TARGET_LINK_LIBRARIES(ri-mds-revert OpenMP::OpenMP_CXX mds)
 #TARGET_LINK_LIBRARIES(ri-mds-space sdsl)
 #TARGET_LINK_LIBRARIES(ri-mds-space divsufsort)
 #TARGET_LINK_LIBRARIES(ri-mds-space divsufsort64)
+
+include_directories(${PROJECT_SOURCE_DIR}/external/move-datastructure/extern/libsais/src)

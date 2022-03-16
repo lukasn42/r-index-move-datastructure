@@ -22,16 +22,16 @@
 #include "../external/move-datastructure/include/mds.hpp"
 #include "../external/move-datastructure/src/mds.cpp"
 
-#include "../external/move-datastructure/extern/libsais/src/libsais.h"
-#include "../external/move-datastructure/extern/libsais/src/libsais.c"
+#include "libsais.h"
+// #include "libsais64.h"
+#include "libsais.c" // #include "libsais64.c"
+
 
 using namespace sdsl;
 
 namespace ri_mds{
 
-template	<	class sparse_bv_type = sparse_sd_vector,
-				class rle_string_t = rle_string_sd
-			>
+template<typename INT_T>
 class r_index_mds{
 
 public:
@@ -43,29 +43,37 @@ public:
 	/*
 	 * Build index
 	 */
-	r_index_mds(string T, int32_t length, int p, int version = 3, int a = 8, bool log = true){
-		n = length;
+	r_index_mds(string T, INT_T n, int p, int version = 3, int a = 8, bool log = true){
+		this->n = n;
 		omp_set_num_threads(p);
 
 		{
 			if (log) cout << "building SA" << endl;
-			std::vector<int32_t> SA(n);
+			std::vector<INT_T> SA(n);
 			if (p > 1) {
-				libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL,p);
+				if (std::is_same<INT_T,uint32_t>::value) {
+					libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL,p);
+				} else {
+					//libsais64_omp((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL,p);
+				}
 			} else {
-				libsais((uint8_t*)&T[0],(int32_t*)&SA[0],n,0,NULL);
+				if (std::is_same<INT_T,uint32_t>::value) {
+					libsais((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL);
+				} else {
+					//libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
+				}
 			}
 			if (log) cout << "building bwt" << endl;
 			string bwt;
 			bwt.resize(n);
 			#pragma omp parallel for num_threads(p)
-			for(int i=0; i<n; i++) {
+			for(int64_t i=0; i<n; i++) {
 				bwt[i] = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
 			}
 			T.clear();
 
 			if (log) cout << "building C" << endl;
-			std::vector<uint32_t> C(256,0);
+			std::vector<INT_T> C(256,0);
 			for (uchar c : bwt) {
 				C[c]++;
 			}
@@ -79,14 +87,14 @@ public:
 
 			{
 				if (log) cout << "building LF-Array" << endl;
-				std::vector<std::pair<uint32_t,uint32_t>> *I_LF = new std::vector<std::pair<uint32_t,uint32_t>>();
+				std::vector<std::pair<INT_T,INT_T>> *I_LF = new std::vector<std::pair<INT_T,INT_T>>();
 				I_LF->reserve(n/16);
 				{
-					std::vector<uint32_t> C_(256,0);
-					uint32_t l = 0;
+					std::vector<INT_T> C_(256,0);
+					INT_T l = 0;
 					uint8_t c = bwt[0];
 					I_LF->emplace_back(std::make_pair(0,C[c]));
-					for (uint32_t i=1; i<n; i++) {
+					for (INT_T i=1; i<n; i++) {
 						if (bwt[i] != c) {
 							C_[c] += i-l;
 							l = i;
@@ -99,16 +107,16 @@ public:
 				C.clear();
 
 				if (log) cout << "building move datastructure for LF" << endl;
-				mds_LF = mds<uint32_t>(I_LF,n,a,p,version,log);
+				mds_LF = mds<INT_T>(I_LF,n,a,p,version,log);
 				r = mds_LF.intervals();
 			}
 
 			{
 				if (log) cout << "building phi-Array" << endl;
-				std::vector<std::pair<uint32_t,uint32_t>> *I_phi = new std::vector<std::pair<uint32_t,uint32_t>>(r);
+				std::vector<std::pair<INT_T,INT_T>> *I_phi = new std::vector<std::pair<INT_T,INT_T>>(r);
 				I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
 				#pragma omp parallel for num_threads(p)
-				for (uint32_t i=1; i<r; i++) {
+				for (INT_T i=1; i<r; i++) {
 					I_phi->at(i) = std::make_pair(SA[mds_LF.pair(i).first],SA[mds_LF.pair(i).first-1]);
 				}
 				if (log) cout << "sorting phi-Array" << endl;
@@ -120,47 +128,45 @@ public:
 				}
 
 				if (log) cout << "builing move datastructure for phi" << endl;
-				mds_phi = mds<uint32_t>(I_phi,n,a,p,version,log);
+				mds_phi = mds<INT_T>(I_phi,n,a,p,version,log);
 			}
 
 			if (log) cout << "building SA-Samples and run-length-bwt" << endl;
-			SA_sampl = std::vector<uint32_t>(r);
+			SA_sampl = std::vector<INT_T>(r);
 			bwt_rh_s.resize(r);
 			bwt_rh_s[0] = bwt[0];
 			SA_sampl[r-1] = SA[n-1];
 			#pragma omp parallel for num_threads(p)
-			for (uint32_t i=1; i<r; i++) {
+			for (INT_T i=1; i<r; i++) {
 				SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
 				bwt_rh_s[i] = bwt[mds_LF.pair(i).first];
 			}
-			SA.clear();
-			bwt.clear();
-
-			if (log) cout << "building SA-Sample indices" << endl;
-			SA_sampl_idx = std::vector<uint32_t>(r);
-			#pragma omp parallel for num_threads(p)
-			for (int i=0; i<r; i++) {
-				uint32_t b = 0;
-				uint32_t e = mds_phi.intervals()-1;
-				uint32_t m;
-				while (b != e) {
-					m = (b+e)/2+1;
-					if (mds_phi.pair(m).first > SA_sampl[i]) {
-						e = m-1;
-					} else {
-						b = m;
-					}
+		}
+		
+		if (log) cout << "building SA-Sample indices" << endl;
+		SA_sampl_idx = std::vector<INT_T>(r);
+		#pragma omp parallel for num_threads(p)
+		for (INT_T i=0; i<r; i++) {
+			INT_T b = 0;
+			INT_T e = mds_phi.intervals()-1;
+			INT_T m;
+			while (b != e) {
+				m = (b+e)/2+1;
+				if (mds_phi.pair(m).first > SA_sampl[i]) {
+					e = m-1;
+				} else {
+					b = m;
 				}
-				SA_sampl_idx[i] = b;
 			}
+			SA_sampl_idx[i] = b;
 		}
 		if (log) cout << "buildung wavelet tree of run-length-bwt" << endl;
 		bwt_rh = huff_string(bwt_rh_s);
 	}
 
 	void revert(string &text) {
-		std::pair<uint32_t,uint32_t> mp = std::make_pair(0,0);
-		for (int i=n-2; i>=0; i--) {
+		std::pair<INT_T,INT_T> mp = std::make_pair(0,0);
+		for (int64_t i=n-2; i>=0; i--) {
 			text[i] = bwt_rh_s[mp.second];
 			mds_LF.move(mp);
 		}
@@ -170,12 +176,12 @@ public:
 	 * Return BWT range of pattern P
 	 */
 	range_t count(string &P){
-		uint32_t m = P.size();
+		INT_T m = P.size();
 
-		std::pair<uint32_t,uint32_t> mp_l(0,0);
-		std::pair<uint32_t,uint32_t> mp_r(n-1,r-1);
+		std::pair<INT_T,INT_T> mp_l(0,0);
+		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
 
-		for (int i=m-1; i>=0; i--) {
+		for (int64_t i=m-1; i>=0; i--) {
 			if (P[i] != bwt_rh_s[mp_l.second]) {
 				mp_l.second = bwt_rh.select(bwt_rh.rank(mp_l.second,P[i])+1,P[i]);
 				mp_l.first = mds_LF.pair(mp_l.second).first;
@@ -213,13 +219,13 @@ public:
 	 * (space consuming if result is big).
 	 */
 	vector<ulint> locate_all(string& P){
-		uint32_t m = P.size();
+		INT_T m = P.size();
 
-		std::pair<uint32_t,uint32_t> mp_l(0,0);
-		std::pair<uint32_t,uint32_t> mp_r(n-1,r-1);
-		std::pair<uint32_t,uint32_t> mp_sa_r(SA_sampl[r-1],SA_sampl_idx[r-1]);
+		std::pair<INT_T,INT_T> mp_l(0,0);
+		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
+		std::pair<INT_T,INT_T> mp_sa_r(SA_sampl[r-1],SA_sampl_idx[r-1]);
 
-		for (int i=m-1; i>=0; i--) {
+		for (int64_t i=m-1; i>=0; i--) {
 			if (P[i] != bwt_rh_s[mp_l.second]) {
 				mp_l.second = bwt_rh.select(bwt_rh.rank(mp_l.second,P[i])+1,P[i]);
 				mp_l.first = mds_LF.pair(mp_l.second).first;
@@ -246,7 +252,7 @@ public:
 
 		if (!occ.empty()) {
 			occ[0] = mp_sa_r.first;
-			for (int i=1; i<occ.size(); i++) {
+			for (int64_t i=1; i<occ.size(); i++) {
 				mds_phi.move(mp_sa_r);
 				occ[i] = mp_sa_r.first;
 			}
@@ -261,22 +267,22 @@ public:
 	ulint serialize(std::ostream& out){
 		ulint w_bytes = 0;
 
-		out.write((char*)&n,sizeof(int32_t));
-		w_bytes += sizeof(int32_t);
+		out.write((char*)&n,sizeof(INT_T));
+		w_bytes += sizeof(INT_T);
 
-		out.write((char*)&r,sizeof(uint32_t));
-		w_bytes += sizeof(uint32_t);
+		out.write((char*)&r,sizeof(INT_T));
+		w_bytes += sizeof(INT_T);
 
 		w_bytes += bwt_rh.serialize(out);
 
 		out.write((char*)&bwt_rh_s[0],r);
 		w_bytes += r;
 
-		out.write((char*)&SA_sampl[0],r*sizeof(uint32_t));
-		w_bytes += r*sizeof(uint32_t);
+		out.write((char*)&SA_sampl[0],r*sizeof(INT_T));
+		w_bytes += r*sizeof(INT_T);
 
-		out.write((char*)&SA_sampl_idx[0],r*sizeof(uint32_t));
-		w_bytes += r*sizeof(uint32_t);
+		out.write((char*)&SA_sampl_idx[0],r*sizeof(INT_T));
+		w_bytes += r*sizeof(INT_T);
 
 		w_bytes += mds_LF.serialize(out);
 		
@@ -289,24 +295,24 @@ public:
 	 * \param in the istream
 	 */
 	void load(std::istream& in) {
-		in.read((char*)&n,sizeof(int32_t));
+		in.read((char*)&n,sizeof(INT_T));
 
-		in.read((char*)&r,sizeof(uint32_t));
+		in.read((char*)&r,sizeof(INT_T));
 
 		bwt_rh.load(in);
 
 		bwt_rh_s.resize(r);
 		in.read((char*)&bwt_rh_s[0],r);
 
-		SA_sampl = std::vector<uint32_t>(r);
-		in.read((char*)&SA_sampl[0],r*sizeof(uint32_t));
+		SA_sampl = std::vector<INT_T>(r);
+		in.read((char*)&SA_sampl[0],r*sizeof(INT_T));
 
-		SA_sampl_idx = std::vector<uint32_t>(r);
-		in.read((char*)&SA_sampl_idx[0],r*sizeof(uint32_t));
+		SA_sampl_idx = std::vector<INT_T>(r);
+		in.read((char*)&SA_sampl_idx[0],r*sizeof(INT_T));
 
-		mds_LF = mds<uint32_t>(in);
+		mds_LF = mds<INT_T>(in);
 
-		mds_phi = mds<uint32_t>(in);
+		mds_phi = mds<INT_T>(in);
 	}
 
 	/*
@@ -335,22 +341,20 @@ public:
 
 	}
 
-	int32_t text_length() {
+	INT_T text_length() {
 		return n;
 	}
 
 private:
 
-	static const uchar TERMINATOR = 1;
-
 	huff_string bwt_rh;
 	string bwt_rh_s;
-	int32_t n;
-	uint32_t r;
-	std::vector<uint32_t> SA_sampl;
-	std::vector<uint32_t> SA_sampl_idx;
-	mds<uint32_t> mds_LF;
-	mds<uint32_t> mds_phi;
+	INT_T n;
+	INT_T r;
+	std::vector<INT_T> SA_sampl;
+	std::vector<INT_T> SA_sampl_idx;
+	mds<INT_T> mds_LF;
+	mds<INT_T> mds_phi;
 };
 
 }

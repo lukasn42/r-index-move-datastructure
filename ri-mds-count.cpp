@@ -1,8 +1,10 @@
 #include <iostream>
 
-#include "internal/r_index_mds.hpp"
+#include <omp.h>
 
 #include "internal/utils.hpp"
+
+#include "internal/r_index_mds.hpp"
 
 using namespace ri_mds;
 using namespace std;
@@ -152,14 +154,13 @@ int main(int argc, char** argv){
 
 	cout << "Loading r-index" << endl;
 
-	if(hyb){
+	bool is_64_bit;
+	in >> is_64_bit;
 
-		count<r_index_mds<sparse_hyb_vector,rle_string_hyb> >(in, patt_file);
-
-	}else{
-
-		count<r_index_mds<> >(in, patt_file);
-
+	if (is_64_bit) {
+		count<r_index_mds<uint64_t>>(in, patt_file);
+	} else {
+		count<r_index_mds<uint32_t>>(in, patt_file);
 	}
 
 	in.close();
