@@ -19,13 +19,13 @@
 
 #include <omp.h>
 
-#include "../external/move-datastructure/include/mds.hpp"
-#include "../external/move-datastructure/src/mds.cpp"
+#include <mds.hpp>
+#include <mds.cpp>
 
-#include "libsais.h"
-// #include "libsais64.h"
-#include "libsais.c" // #include "libsais64.c"
-
+extern "C" {
+	#include <libsais.h>
+	#include <libsais64.h>
+}
 
 using namespace sdsl;
 
@@ -92,7 +92,7 @@ public:
 				{
 					std::vector<INT_T> C_(256,0);
 					INT_T l = 0;
-					uint8_t c = bwt[0];
+					uchar c = bwt[0];
 					I_LF->emplace_back(std::make_pair(0,C[c]));
 					for (INT_T i=1; i<n; i++) {
 						if (bwt[i] != c) {
@@ -166,9 +166,10 @@ public:
 
 	void revert(string &text) {
 		std::pair<INT_T,INT_T> mp = std::make_pair(0,0);
-		for (int64_t i=n-2; i>=0; i--) {
-			text[i] = bwt_rh_s[mp.second];
+		text[n-2] = bwt_rh_s[mp.second];
+		for (int64_t i=n-3; i>=0; i--) {
 			mds_LF.move(mp);
+			text[i] = bwt_rh_s[mp.second];
 		}
 	}
 

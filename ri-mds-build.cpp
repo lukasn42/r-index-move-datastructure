@@ -3,9 +3,7 @@
 #include <omp.h>
 
 #include "utils.hpp"
-
-#include "internal/r_index_mds.hpp"
-
+#include "r_index_mds.hpp"
 
 using namespace ri_mds;
 using namespace std;

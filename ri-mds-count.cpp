@@ -2,9 +2,8 @@
 
 #include <omp.h>
 
-#include "internal/utils.hpp"
-
-#include "internal/r_index_mds.hpp"
+#include "utils.hpp"
+#include "r_index_mds.hpp"
 
 using namespace ri_mds;
 using namespace std;

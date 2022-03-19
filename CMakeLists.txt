@@ -11,56 +11,49 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-#set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/.. )
-
 project (s-rlbwt-mds)
 
-include_directories(${PROJECT_SOURCE_DIR})
-include_directories(${PROJECT_SOURCE_DIR}/internal)
-include_directories(sdsl/include) #SDSL headers are here
+include_directories(/)
+include_directories(internal/)
 
-LINK_DIRECTORIES(sdsl/lib) #SDSL lib are here
+include_directories(sdsl/include) #SDSL headers are here
+link_directories(sdsl/lib) #SDSL lib are here
 
 find_package(OpenMP)
 
-link_libraries(${CMAKE_DL_LIBS})
+# ips4o
+include_directories(external/move-datastructure/extern/ips4o)
+
+# concurrentqueue
+include_directories(external/move-datastructure/extern/concurrentqueue)
+
+# malloc_count
+include_directories(external/move-datastructure/extern/malloc_count)
+
+# libsais
+include_directories(external/move-datastructure/extern/libsais/src)
+
+# move datastructure
+include_directories(
+    external/move-datastructure/src/ external/move-datastructure/src/mdsb/ external/move-datastructure/src/misc/
+    external/move-datastructure/include/ external/move-datastructure/include/mdsb/ external/move-datastructure/include/misc/
+)
 add_subdirectory(external/move-datastructure)
 
 message("Building in ${CMAKE_BUILD_TYPE} mode")
-
-#set(CMAKE_CXX_FLAGS "--std=c++11")
 
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -fstrict-aliasing -ftree-vectorize -funroll-loops -finline-functions -march=native")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-ggdb3 -Wall -Wextra -march=native -fstrict-aliasing")
 
 add_executable(ri-mds-build ri-mds-build.cpp)
-TARGET_LINK_LIBRARIES(ri-mds-build sdsl)
-TARGET_LINK_LIBRARIES(ri-mds-build divsufsort)
-TARGET_LINK_LIBRARIES(ri-mds-build divsufsort64)
-TARGET_LINK_LIBRARIES(ri-mds-build OpenMP::OpenMP_CXX mds)
+target_link_libraries(ri-mds-build dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
 
 add_executable(ri-mds-locate ri-mds-locate.cpp)
-TARGET_LINK_LIBRARIES(ri-mds-locate sdsl)
-TARGET_LINK_LIBRARIES(ri-mds-locate divsufsort)
-TARGET_LINK_LIBRARIES(ri-mds-locate divsufsort64)
-TARGET_LINK_LIBRARIES(ri-mds-locate OpenMP::OpenMP_CXX mds)
+target_link_libraries(ri-mds-locate dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
 
 add_executable(ri-mds-count ri-mds-count.cpp)
-TARGET_LINK_LIBRARIES(ri-mds-count sdsl)
-TARGET_LINK_LIBRARIES(ri-mds-count divsufsort)
-TARGET_LINK_LIBRARIES(ri-mds-count divsufsort64)
-TARGET_LINK_LIBRARIES(ri-mds-count OpenMP::OpenMP_CXX mds)
+target_link_libraries(ri-mds-count dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
 
 add_executable(ri-mds-revert ri-mds-revert.cpp)
-TARGET_LINK_LIBRARIES(ri-mds-revert sdsl)
-TARGET_LINK_LIBRARIES(ri-mds-revert divsufsort)
-TARGET_LINK_LIBRARIES(ri-mds-revert divsufsort64)
-TARGET_LINK_LIBRARIES(ri-mds-revert OpenMP::OpenMP_CXX mds)
-
-#add_executable(ri-mds-space ri-mds-space.cpp)
-#TARGET_LINK_LIBRARIES(ri-mds-space sdsl)
-#TARGET_LINK_LIBRARIES(ri-mds-space divsufsort)
-#TARGET_LINK_LIBRARIES(ri-mds-space divsufsort64)
-
-include_directories(${PROJECT_SOURCE_DIR}/external/move-datastructure/extern/libsais/src)
+target_link_libraries(ri-mds-revert dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
