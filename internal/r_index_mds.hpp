@@ -54,13 +54,13 @@ public:
 				if (std::is_same<INT_T,uint32_t>::value) {
 					libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL,p);
 				} else {
-					//libsais64_omp((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL,p);
+					libsais64_omp((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL,p);
 				}
 			} else {
 				if (std::is_same<INT_T,uint32_t>::value) {
 					libsais((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL);
 				} else {
-					//libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
+					libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
 				}
 			}
 			if (log) cout << "building bwt" << endl;
