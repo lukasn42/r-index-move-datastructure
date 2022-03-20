@@ -4,7 +4,7 @@
  *  Created on: Apr 13, 2017
  *      Author: nico
  *
- * Small version of the r-index: O(r) words of space, O(log(n/r)) locate time per occurrence
+ * Small v of the r-index: O(r) words of space, O(log(n/r)) locate time per occurrence
  *
  */
 
@@ -19,6 +19,10 @@
 
 #include <omp.h>
 
+extern "C" {
+	#include <malloc_count.h>
+}
+
 #include <mds.hpp>
 #include <mds.cpp>
 
@@ -28,6 +32,14 @@ extern "C" {
 }
 
 using namespace sdsl;
+
+std::chrono::steady_clock::time_point now() {
+    return std::chrono::steady_clock::now();
+}
+
+int64_t time_diff_ms(std::chrono::steady_clock::time_point t1, std::chrono::steady_clock::time_point t2) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
+}
 
 namespace ri_mds{
 
@@ -43,9 +55,12 @@ public:
 	/*
 	 * Build index
 	 */
-	r_index_mds(string T, INT_T n, int p, int version = 3, int a = 8, bool log = true){
+	r_index_mds(string T, INT_T n, int p, int v = 3, INT_T a = 8, bool log = true, std::ofstream *measurement_file = NULL){
 		this->n = n;
+		this->a = a;
 		omp_set_num_threads(p);
+
+		auto time = now();
 
 		{
 			if (log) cout << "building SA" << endl;
@@ -63,6 +78,11 @@ public:
 					libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
 				}
 			}
+			if (measurement_file != NULL) {
+				*measurement_file << " phase_1=" << time_diff_ms(time,now());
+				time = now();
+			}
+
 			if (log) cout << "building bwt" << endl;
 			string bwt;
 			bwt.resize(n);
@@ -105,9 +125,13 @@ public:
 				}
 				I_LF->shrink_to_fit();
 				C.clear();
+				if (measurement_file != NULL) {
+					*measurement_file << " phase_2=" << time_diff_ms(time,now());
+					time = now();
+				}
 
 				if (log) cout << "building move datastructure for LF" << endl;
-				mds_LF = mds<INT_T>(I_LF,n,a,p,version,log);
+				mds_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
 				r = mds_LF.intervals();
 			}
 
@@ -128,10 +152,14 @@ public:
 				}
 
 				if (log) cout << "builing move datastructure for phi" << endl;
-				mds_phi = mds<INT_T>(I_phi,n,a,p,version,log);
+				mds_phi = mds<INT_T>(I_phi,n,a,p,v,measurement_file == NULL ? log : false);
+				if (measurement_file != NULL) {
+					*measurement_file << " phase_3=" << time_diff_ms(time,now());
+					time = now();
+				}
 			}
 
-			if (log) cout << "building SA-Samples and run-length-bwt" << endl;
+			if (log) cout << "building SA-Samples and bwt runheads" << endl;
 			SA_sampl = std::vector<INT_T>(r);
 			bwt_rh_s.resize(r);
 			bwt_rh_s[0] = bwt[0];
@@ -160,8 +188,18 @@ public:
 			}
 			SA_sampl_idx[i] = b;
 		}
-		if (log) cout << "buildung wavelet tree of run-length-bwt" << endl;
+		if (measurement_file != NULL) {
+			*measurement_file << " phase_4=" << time_diff_ms(time,now());
+			time = now();
+		}
+
+		if (log) cout << "buildung wavelet tree of bwt runheads" << endl;
 		bwt_rh = huff_string(bwt_rh_s);
+		if (measurement_file != NULL) {
+			*measurement_file << " phase_5=" << time_diff_ms(time,now());
+			time = now();
+			*measurement_file << " memory_usage=" << malloc_count_peak()/1000000 << endl;
+		}
 	}
 
 	void revert(string &text) {
@@ -274,6 +312,9 @@ public:
 		out.write((char*)&r,sizeof(INT_T));
 		w_bytes += sizeof(INT_T);
 
+		out.write((char*)&a,sizeof(INT_T));
+		w_bytes += sizeof(INT_T);
+
 		w_bytes += bwt_rh.serialize(out);
 
 		out.write((char*)&bwt_rh_s[0],r);
@@ -299,6 +340,8 @@ public:
 		in.read((char*)&n,sizeof(INT_T));
 
 		in.read((char*)&r,sizeof(INT_T));
+
+		in.read((char*)&a,sizeof(INT_T));
 
 		bwt_rh.load(in);
 
@@ -346,12 +389,17 @@ public:
 		return n;
 	}
 
+	INT_T ret_a() {
+		return this->a;
+	}
+
 private:
 
 	huff_string bwt_rh;
 	string bwt_rh_s;
 	INT_T n;
 	INT_T r;
+	INT_T a;
 	std::vector<INT_T> SA_sampl;
 	std::vector<INT_T> SA_sampl_idx;
 	mds<INT_T> mds_LF;

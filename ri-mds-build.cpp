@@ -1,6 +1,11 @@
 #include <iostream>
+#include <filesystem>
 
 #include <omp.h>
+
+extern "C" {
+	#include <malloc_count.h>
+}
 
 #include "utils.hpp"
 #include "r_index_mds.hpp"
@@ -14,6 +19,7 @@ int sa_rate = 512;
 int p = omp_get_max_threads();
 int a = 8;
 int v = 3;
+std::ofstream measurement_file;
 ulint T = 0;//Build fast index with SA rate = T
 bool fast = false;//build fast index
 bool hyb = false; //use hybrid bitvectors instead of sd_vectors?
@@ -31,6 +37,7 @@ void help(){
 	cout << "   -p                   number of threads to use (1 for v=1/2, 1<=p for v=3, 2<=p for v=4) (default: all threads)"<<endl;
 	cout << "   -a                   balancing parameter, restricts size to O(r*(1+1/(a-1))^2) (default: 8)"<<endl;
 	cout << "   -v                   balancing algorithm, (1/2/3/4) (default: 3)"<<endl;
+	cout << "   -l                   file to write runtime and memory usage data to"<<endl;
 	cout << "   <input_file_name>    input text file." << endl;
 	exit(0);
 }
@@ -82,6 +89,22 @@ void parse_args(char** argv, int argc, int &ptr){
 		v = atoi(argv[ptr]);
 		ptr++;
 
+	}else if(s.compare("-l")==0){
+
+		if(ptr>=argc-1){
+			cout << "Error: missing parameter after -o option." << endl;
+			help();
+		}
+
+		measurement_file.open(argv[ptr],std::filesystem::exists(argv[ptr]) ? std::ios::app : std::ios::out);
+
+		if (!measurement_file.good()) {
+			cout << "Error: cannot open measurement file" << endl;
+			help();
+		}
+
+		ptr++;
+
 	}/*else if(s.compare("-h")==0){
 
 		hyb=true;
@@ -122,8 +145,6 @@ int main(int argc, char** argv){
     using std::chrono::duration_cast;
     using std::chrono::duration;
 
-    auto t1 = high_resolution_clock::now();
-
 	//parse options
 
     out_basename=string();
@@ -150,6 +171,8 @@ int main(int argc, char** argv){
 	string T;
 	uint64_t n;
 
+	malloc_count_reset_peak();
+
 	{
 		std::ifstream file(input_file);
 		if (!file.good()) {
@@ -167,6 +190,13 @@ int main(int argc, char** argv){
 
 	string path = string(out_basename).append(".ri-mds");
 	std::ofstream out(path);
+	string text_file_name = out_basename.substr(out_basename.find_last_of("/\\") + 1);
+
+	if (measurement_file.is_open()) {
+		measurement_file << "RESULT type=ri_mds name=" << text_file_name << " p=" << p << " v=" << v << " a=" << a;
+	}
+	
+    auto t1 = high_resolution_clock::now();
 
 	if(hyb){
 
@@ -175,23 +205,25 @@ int main(int argc, char** argv){
 
 	}else{
 
-		if (n <= INT_MAX) {
+		if (n <= UINT_MAX) {
 			out << false;
-			auto idx = r_index_mds<uint32_t>(T,(uint32_t)n,p,v,a);
+			auto idx = r_index_mds<uint32_t>(T,(uint32_t)n,p,v,(uint32_t)a,true,measurement_file.is_open() ? &measurement_file : NULL);
 			idx.serialize(out);
 		} else {
 			out << true;
-			auto idx = r_index_mds<uint64_t>(T,n,p,v,a);
+			auto idx = r_index_mds<uint64_t>(T,n,p,v,(uint64_t)a,true,measurement_file.is_open() ? &measurement_file : NULL);
 			idx.serialize(out);
 		}
 
 	}
 
-
 	auto t2 = high_resolution_clock::now();
 	ulint total = duration_cast<duration<double, std::ratio<1>>>(t2 - t1).count();
 	cout << "Build time : " << get_time(total) << endl;
 
+	if (measurement_file.is_open()) {
+		measurement_file << " time_tot=" << total;
+	}
 
 	out.close();
 
