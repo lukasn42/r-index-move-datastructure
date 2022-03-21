@@ -222,7 +222,7 @@ int main(int argc, char** argv){
 	cout << "Build time : " << get_time(total) << endl;
 
 	if (measurement_file.is_open()) {
-		measurement_file << " time_tot=" << total;
+		measurement_file << " time_tot=" << total << endl;
 	}
 
 	out.close();

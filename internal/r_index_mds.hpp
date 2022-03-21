@@ -198,7 +198,7 @@ public:
 		if (measurement_file != NULL) {
 			*measurement_file << " phase_5=" << time_diff_ms(time,now());
 			time = now();
-			*measurement_file << " memory_usage=" << malloc_count_peak()/1000000 << endl;
+			*measurement_file << " memory_usage=" << malloc_count_peak()/1000000;
 		}
 	}
 
