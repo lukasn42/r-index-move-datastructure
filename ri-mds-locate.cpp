@@ -126,6 +126,8 @@ void locate(std::ifstream& in, string patterns){
 
 	auto t2 = high_resolution_clock::now();
 
+	int64_t execution_time=0;
+
 	cout << "searching patterns ... " << endl;
 	ifstream ifs(patterns);
 
@@ -161,7 +163,13 @@ void locate(std::ifstream& in, string patterns){
 
 		//cout << "locating " << idx.occ(p) << " occurrences of "<< p << " ... " << flush;
 
+		auto t_before = high_resolution_clock::now();
+
 		auto OCC = idx.locate_all(p);	//occurrences
+
+		auto t_after = high_resolution_clock::now();
+
+		execution_time += std::chrono::duration_cast<std::chrono::microseconds>(t_after - t_before).count();
 
 		if(ofile.compare(string())!=0){
 
@@ -234,7 +242,7 @@ void locate(std::ifstream& in, string patterns){
 	cout << "Search time : " << (double)search/occ_tot << " milliseconds/occurrence (total: " << occ_tot << " occurrences)" << endl;
 
 	if (measurement_file.is_open()) {
-		measurement_file << " time=" << search << endl;
+		measurement_file << " time=" << execution_time/1000 << endl;
 	}
 }
 
@@ -266,9 +274,9 @@ int main(int argc, char** argv){
 	in >> is_64_bit;
 
 	if (is_64_bit) {
-		locate<r_index_mds<uint64_t>>(in, patt_file);
+		locate<r_index_mds<int64_t>>(in, patt_file);
 	} else {
-		locate<r_index_mds<uint32_t>>(in, patt_file);
+		locate<r_index_mds<int32_t>>(in, patt_file);
 	}
 
 	in.close();

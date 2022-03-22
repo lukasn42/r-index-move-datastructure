@@ -112,6 +112,8 @@ void count(std::ifstream& in, string patterns){
 
 	ulint occ_tot=0;
 
+	int64_t execution_time=0;
+
 	//extract patterns from file and search them in the index
 	for(ulint i=0;i<n;++i){
 
@@ -129,8 +131,13 @@ void count(std::ifstream& in, string patterns){
 			p+=c;
 		}
 
+		auto t_before = high_resolution_clock::now();
+
 		occ_tot += idx.occ(p);
 
+		auto t_after = high_resolution_clock::now();
+
+		execution_time += std::chrono::duration_cast<std::chrono::microseconds>(t_after - t_before).count();
 	}
 
 	double occ_avg = (double)occ_tot / n;
@@ -156,7 +163,7 @@ void count(std::ifstream& in, string patterns){
 	cout << "Search time : " << (double)search/occ_tot << " milliseconds/occurrence (total: " << occ_tot << " occurrences)" << endl;
 
 	if (measurement_file.is_open()) {
-		measurement_file << " time=" << search << endl;
+		measurement_file << " time=" << execution_time/1000 << endl;
 	}
 }
 
@@ -188,9 +195,9 @@ int main(int argc, char** argv){
 	in >> is_64_bit;
 
 	if (is_64_bit) {
-		count<r_index_mds<uint64_t>>(in, patt_file);
+		count<r_index_mds<int64_t>>(in, patt_file);
 	} else {
-		count<r_index_mds<uint32_t>>(in, patt_file);
+		count<r_index_mds<int32_t>>(in, patt_file);
 	}
 
 	in.close();

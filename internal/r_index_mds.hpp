@@ -66,13 +66,13 @@ public:
 			if (log) cout << "building SA" << endl;
 			std::vector<INT_T> SA(n);
 			if (p > 1) {
-				if (std::is_same<INT_T,uint32_t>::value) {
+				if (std::is_same<INT_T,int32_t>::value) {
 					libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL,p);
 				} else {
 					libsais64_omp((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL,p);
 				}
 			} else {
-				if (std::is_same<INT_T,uint32_t>::value) {
+				if (std::is_same<INT_T,int32_t>::value) {
 					libsais((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL);
 				} else {
 					libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
@@ -87,7 +87,7 @@ public:
 			string bwt;
 			bwt.resize(n);
 			#pragma omp parallel for num_threads(p)
-			for(int64_t i=0; i<n; i++) {
+			for(INT_T i=0; i<n; i++) {
 				bwt[i] = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
 			}
 			T.clear();
@@ -205,7 +205,7 @@ public:
 	void revert(string &text) {
 		std::pair<INT_T,INT_T> mp = std::make_pair(0,0);
 		text[n-2] = bwt_rh_s[mp.second];
-		for (int64_t i=n-3; i>=0; i--) {
+		for (INT_T i=n-3; i>=0; i--) {
 			mds_LF.move(mp);
 			text[i] = bwt_rh_s[mp.second];
 		}
@@ -220,7 +220,7 @@ public:
 		std::pair<INT_T,INT_T> mp_l(0,0);
 		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
 
-		for (int64_t i=m-1; i>=0; i--) {
+		for (INT_T i=m-1; i>=0; i--) {
 			if (P[i] != bwt_rh_s[mp_l.second]) {
 				mp_l.second = bwt_rh.select(bwt_rh.rank(mp_l.second,P[i])+1,P[i]);
 				mp_l.first = mds_LF.pair(mp_l.second).first;
@@ -264,7 +264,7 @@ public:
 		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
 		std::pair<INT_T,INT_T> mp_sa_r(SA_sampl[r-1],SA_sampl_idx[r-1]);
 
-		for (int64_t i=m-1; i>=0; i--) {
+		for (INT_T i=m-1; i>=0; i--) {
 			if (P[i] != bwt_rh_s[mp_l.second]) {
 				mp_l.second = bwt_rh.select(bwt_rh.rank(mp_l.second,P[i])+1,P[i]);
 				mp_l.first = mds_LF.pair(mp_l.second).first;
@@ -291,7 +291,7 @@ public:
 
 		if (!occ.empty()) {
 			occ[0] = mp_sa_r.first;
-			for (int64_t i=1; i<occ.size(); i++) {
+			for (INT_T i=1; i<occ.size(); i++) {
 				mds_phi.move(mp_sa_r);
 				occ[i] = mp_sa_r.first;
 			}

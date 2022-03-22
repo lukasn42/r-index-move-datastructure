@@ -169,7 +169,7 @@ int main(int argc, char** argv){
 	cout << "Index will be saved to " << idx_file << endl;
 
 	string T;
-	uint64_t n;
+	int64_t n;
 
 	malloc_count_reset_peak();
 
@@ -182,8 +182,15 @@ int main(int argc, char** argv){
 		file.seekg(0,std::ios::end);
 		n = file.tellg()+(std::streamsize)+1;
 		file.seekg(0,std::ios::beg);
-		T.resize(n);
-		file.read(&T[0],n-1);
+		if (n <= INT_MAX) {
+			T.resize(n);
+			file.read((char*)&T[0],n-1);
+		} else {
+			std::stringstream buffer;
+			buffer << file.rdbuf();
+			T.reserve(n);
+			T = buffer.str();
+		}
 		file.close();
 		T[n-1] = 1;
 	}
@@ -204,14 +211,13 @@ int main(int argc, char** argv){
 		//idx.serialize(out);
 
 	}else{
-
-		if (n <= UINT_MAX) {
+		if (n <= INT_MAX) {
 			out << false;
-			auto idx = r_index_mds<uint32_t>(T,(uint32_t)n,p,v,(uint32_t)a,true,measurement_file.is_open() ? &measurement_file : NULL);
+			auto idx = r_index_mds<int32_t>(T,(int32_t)n,p,v,(int32_t)a,true,measurement_file.is_open() ? &measurement_file : NULL);
 			idx.serialize(out);
 		} else {
 			out << true;
-			auto idx = r_index_mds<uint64_t>(T,n,p,v,(uint64_t)a,true,measurement_file.is_open() ? &measurement_file : NULL);
+			auto idx = r_index_mds<int64_t>(T,(int64_t)n,p,v,(int64_t)a,true,measurement_file.is_open() ? &measurement_file : NULL);
 			idx.serialize(out);
 		}
 

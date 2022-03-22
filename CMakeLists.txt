@@ -48,12 +48,16 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-ggdb3 -Wall -Wextra -march=native -fstrict-
 
 add_executable(ri-mds-build ri-mds-build.cpp)
 target_link_libraries(ri-mds-build dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
+target_link_options(ri-mds-build PRIVATE -static-libgcc -static-libstdc++)
 
 add_executable(ri-mds-locate ri-mds-locate.cpp)
 target_link_libraries(ri-mds-locate dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
+target_link_options(ri-mds-locate PRIVATE -static-libgcc -static-libstdc++)
 
 add_executable(ri-mds-count ri-mds-count.cpp)
 target_link_libraries(ri-mds-count dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
+target_link_options(ri-mds-count PRIVATE -static-libgcc -static-libstdc++)
 
 add_executable(ri-mds-revert ri-mds-revert.cpp)
 target_link_libraries(ri-mds-revert dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
+target_link_options(ri-mds-revert PRIVATE -static-libgcc -static-libstdc++)

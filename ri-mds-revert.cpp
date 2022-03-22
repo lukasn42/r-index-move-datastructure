@@ -143,9 +143,9 @@ int main(int argc, char** argv){
 	in >> is_64_bit;
 
 	if (is_64_bit) {
-		revert<r_index_mds<uint64_t>>(in);
+		revert<r_index_mds<int64_t>>(in);
 	} else {
-		revert<r_index_mds<uint32_t>>(in);
+		revert<r_index_mds<int32_t>>(in);
 	}
 
 	in.close();
