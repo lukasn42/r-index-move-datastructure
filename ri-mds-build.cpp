@@ -7,6 +7,10 @@ extern "C" {
 	#include <malloc_count.h>
 }
 
+int64_t time_diff_ms(std::chrono::_V2::system_clock::time_point t1, std::chrono::_V2::system_clock::time_point t2) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
+}
+
 #include "utils.hpp"
 #include "r_index_mds.hpp"
 
@@ -228,7 +232,7 @@ int main(int argc, char** argv){
 	cout << "Build time : " << get_time(total) << endl;
 
 	if (measurement_file.is_open()) {
-		measurement_file << " time_tot=" << total << endl;
+		measurement_file << " time_tot=" << time_diff_ms(t1,t2) << " file_size=" << std::filesystem::file_size(std::filesystem::path(path))/1000 << endl;
 	}
 
 	out.close();
