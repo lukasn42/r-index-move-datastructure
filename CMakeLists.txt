@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION "3.16.3")
 set (CMAKE_CXX_STANDARD 20)
 
+find_package(TBB REQUIRED)
+
 CMAKE_POLICY(SET CMP0081 NEW)
 CMAKE_POLICY(SET CMP0015 NEW)
 CMAKE_POLICY(SET CMP0048 NEW)
@@ -47,8 +49,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -fstrict-aliasing -ftree-vectorize 
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-ggdb3 -Wall -Wextra -march=native -fstrict-aliasing")
 
 add_executable(ri-mds-build ri-mds-build.cpp)
-target_link_libraries(ri-mds-build dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)
-target_link_options(ri-mds-build PRIVATE -static-libgcc -static-libstdc++)
+target_link_libraries(ri-mds-build dl OpenMP::OpenMP_CXX TBB::tbb sdsl malloc_count libsais mds)
+target_link_options(ri-mds-build PRIVATE -L$TBBROOT/lib/intel64/gcc4.8 -ltbbmalloc_proxy -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -static-libgcc -static-libstdc++)
 
 add_executable(ri-mds-locate ri-mds-locate.cpp)
 target_link_libraries(ri-mds-locate dl OpenMP::OpenMP_CXX sdsl malloc_count libsais mds)

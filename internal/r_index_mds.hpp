@@ -62,113 +62,104 @@ public:
 
 		auto time = now();
 
-		{
-			if (log) cout << "building SA" << endl;
-			std::vector<INT_T> SA(n);
-			if (p > 1) {
-				if (std::is_same<INT_T,int32_t>::value) {
-					libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL,p);
-				} else {
-					libsais64_omp((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL,p);
-				}
+		if (log) cout << "building SA" << endl;
+		std::vector<INT_T> SA(n);
+		if (p > 1) {
+			if (std::is_same<INT_T,int32_t>::value) {
+				libsais_omp((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL,p);
 			} else {
-				if (std::is_same<INT_T,int32_t>::value) {
-					libsais((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL);
-				} else {
-					libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
-				}
+				libsais64_omp((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL,p);
 			}
-			if (measurement_file != NULL) {
-				*measurement_file << " phase_1=" << time_diff_ms(time,now());
-				time = now();
+		} else {
+			if (std::is_same<INT_T,int32_t>::value) {
+				libsais((uint8_t*)&T[0],(int32_t*)&SA[0],(int32_t)n,0,NULL);
+			} else {
+				libsais64((uint8_t*)&T[0],(int64_t*)&SA[0],(int64_t)n,0,NULL);
 			}
+		}
+		if (measurement_file != NULL) {
+			*measurement_file << " phase_1=" << time_diff_ms(time,now());
+			time = now();
+		}
 
-			if (log) cout << "building bwt" << endl;
-			string bwt;
-			bwt.resize(n);
-			#pragma omp parallel for num_threads(p)
-			for(INT_T i=0; i<n; i++) {
-				bwt[i] = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
-			}
-			T.clear();
+		if (log) cout << "building bwt" << endl;
+		string bwt;
+		bwt.resize(n);
+		#pragma omp parallel for num_threads(p)
+		for(INT_T i=0; i<n; i++) {
+			bwt[i] = SA[i] == 0 ? T[n-1] : T[SA[i]-1];
+		}
+		T.clear();
 
-			if (log) cout << "building C" << endl;
-			std::vector<INT_T> C(256,0);
-			for (uchar c : bwt) {
-				C[c]++;
-			}
-			for (int i=255; i>0; i--) {
-				C[i] = C[i-1];
-			}
-			C[0] = 0;
-			for (int i=1; i<256; i++) {
-				C[i] += C[i-1];
-			}
+		if (log) cout << "building C" << endl;
+		std::vector<INT_T> C(256,0);
+		for (uchar c : bwt) {
+			C[c]++;
+		}
+		for (int i=255; i>0; i--) {
+			C[i] = C[i-1];
+		}
+		C[0] = 0;
+		for (int i=1; i<256; i++) {
+			C[i] += C[i-1];
+		}
 
-			{
-				if (log) cout << "building LF-Array" << endl;
-				std::vector<std::pair<INT_T,INT_T>> *I_LF = new std::vector<std::pair<INT_T,INT_T>>();
-				I_LF->reserve(n/16);
-				{
-					std::vector<INT_T> C_(256,0);
-					INT_T l = 0;
-					uchar c = bwt[0];
-					I_LF->emplace_back(std::make_pair(0,C[c]));
-					for (INT_T i=1; i<n; i++) {
-						if (bwt[i] != c) {
-							C_[c] += i-l;
-							l = i;
-							c = bwt[i];
-							I_LF->emplace_back(std::make_pair(i,C[c]+C_[c]));
-						}
-					}
-				}
-				I_LF->shrink_to_fit();
-				C.clear();
-				if (measurement_file != NULL) {
-					*measurement_file << " phase_2=" << time_diff_ms(time,now());
-					time = now();
-				}
-
-				if (log) cout << "building move datastructure for LF" << endl;
-				mds_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
-				r = mds_LF.intervals();
+		if (log) cout << "building LF-Array" << endl;
+		std::vector<std::pair<INT_T,INT_T>> *I_LF = new std::vector<std::pair<INT_T,INT_T>>();
+		I_LF->reserve(n/16);
+		std::vector<INT_T> C_(256,0);
+		INT_T l = 0;
+		uchar c = bwt[0];
+		I_LF->emplace_back(std::make_pair(0,C[c]));
+		for (INT_T i=1; i<n; i++) {
+			if (bwt[i] != c) {
+				C_[c] += i-l;
+				l = i;
+				c = bwt[i];
+				I_LF->emplace_back(std::make_pair(i,C[c]+C_[c]));
 			}
+		}
+		I_LF->shrink_to_fit();
+		C.clear();
+		C_.clear();
+		if (measurement_file != NULL) {
+			*measurement_file << " phase_2=" << time_diff_ms(time,now());
+			time = now();
+		}
 
-			{
-				if (log) cout << "building phi-Array" << endl;
-				std::vector<std::pair<INT_T,INT_T>> *I_phi = new std::vector<std::pair<INT_T,INT_T>>(r);
-				I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
-				#pragma omp parallel for num_threads(p)
-				for (INT_T i=1; i<r; i++) {
-					I_phi->at(i) = std::make_pair(SA[mds_LF.pair(i).first],SA[mds_LF.pair(i).first-1]);
-				}
-				if (log) cout << "sorting phi-Array" << endl;
-				auto comp = [](auto p1, auto p2){return p1.first < p2.first;};
-				if (p > 1) {
-					ips4o::parallel::sort(I_phi->begin(),I_phi->end(),comp);
-				} else {
-					ips4o::sort(I_phi->begin(),I_phi->end(),comp);
-				}
+		if (log) cout << "building move datastructure for LF" << endl;
+		mds_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
+		r = mds_LF.intervals();
 
-				if (log) cout << "builing move datastructure for phi" << endl;
-				mds_phi = mds<INT_T>(I_phi,n,a,p,v,measurement_file == NULL ? log : false);
-				if (measurement_file != NULL) {
-					*measurement_file << " phase_3=" << time_diff_ms(time,now());
-					time = now();
-				}
-			}
+		if (log) cout << "building phi-Array, SA-Samples and bwt runheads" << endl;
+		std::vector<std::pair<INT_T,INT_T>> *I_phi = new std::vector<std::pair<INT_T,INT_T>>(r);
+		SA_sampl = std::vector<INT_T>(r);
+		bwt_rh_s.resize(r);
+		I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
+		SA_sampl[r-1] = SA[n-1];
+		bwt_rh_s[0] = bwt[0];
+		#pragma omp parallel for num_threads(p)
+		for (INT_T i=1; i<r; i++) {
+			I_phi->at(i) = std::make_pair(SA[mds_LF.pair(i).first],SA[mds_LF.pair(i).first-1]);
+			SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
+			bwt_rh_s[i] = bwt[mds_LF.pair(i).first];
+		}
+		bwt.clear();
+		SA.clear();
 
-			if (log) cout << "building SA-Samples and bwt runheads" << endl;
-			SA_sampl = std::vector<INT_T>(r);
-			bwt_rh_s.resize(r);
-			bwt_rh_s[0] = bwt[0];
-			SA_sampl[r-1] = SA[n-1];
-			#pragma omp parallel for num_threads(p)
-			for (INT_T i=1; i<r; i++) {
-				SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
-				bwt_rh_s[i] = bwt[mds_LF.pair(i).first];
-			}
+		if (log) cout << "sorting phi-Array" << endl;
+		auto comp = [](auto p1, auto p2){return p1.first < p2.first;};
+		if (p > 1) {
+			ips4o::parallel::sort(I_phi->begin(),I_phi->end(),comp);
+		} else {
+			ips4o::sort(I_phi->begin(),I_phi->end(),comp);
+		}
+
+		if (log) cout << "builing move datastructure for phi" << endl;
+		mds_phi = mds<INT_T>(I_phi,n,a,p,v,measurement_file == NULL ? log : false);
+		if (measurement_file != NULL) {
+			*measurement_file << " phase_3=" << time_diff_ms(time,now());
+			time = now();
 		}
 		
 		if (log) cout << "building SA-Sample indices" << endl;
