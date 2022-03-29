@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION "3.16.3")
 set (CMAKE_CXX_STANDARD 20)
 
+project (s-rlbwt-mds)
+
 find_package(TBB REQUIRED)
 
 CMAKE_POLICY(SET CMP0081 NEW)
@@ -12,8 +14,6 @@ if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Setting build type to 'Release' as none was specified.")
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
-
-project (s-rlbwt-mds)
 
 include_directories(/)
 include_directories(internal/)

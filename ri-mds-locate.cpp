@@ -155,10 +155,19 @@ void locate(std::ifstream& in, string patterns){
 
 		string p = string();
 
-		for(ulint j=0;j<m;++j){
-			char c;
-			ifs.get(c);
-			p+=c;
+		if (idx.ret_char_shift() != 0) {
+			unsigned char char_shift = idx.ret_char_shift();
+			for(ulint j=0;j<m;++j){
+				char c;
+				ifs.get(c);
+				p+=c+char_shift;
+			}
+		} else {
+			for(ulint j=0;j<m;++j){
+				char c;
+				ifs.get(c);
+				p+=c;
+			}
 		}
 
 		//cout << "locating " << idx.occ(p) << " occurrences of "<< p << " ... " << flush;
@@ -193,6 +202,13 @@ void locate(std::ifstream& in, string patterns){
 				cout << "Error: wrong number of located occurrences: " << OCC.size() << "/" << idx.occ(p) << endl;
 				exit(0);
 
+			}
+
+			if (idx.ret_char_shift() != 0) {
+				unsigned char char_shift = idx.ret_char_shift();
+				for (ulint i=0; i<p.size(); i++) {
+					p[i]-=char_shift;
+				}
 			}
 
 			for(auto o:OCC){

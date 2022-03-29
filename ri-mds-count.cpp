@@ -125,10 +125,19 @@ void count(std::ifstream& in, string patterns){
 
 		string p = string();
 
-		for(ulint j=0;j<m;++j){
-			char c;
-			ifs.get(c);
-			p+=c;
+		if (idx.ret_char_shift() != 0) {
+			unsigned char char_shift = idx.ret_char_shift();
+			for(ulint j=0;j<m;++j){
+				char c;
+				ifs.get(c);
+				p+=c+char_shift;
+			}
+		} else {
+			for(ulint j=0;j<m;++j){
+				char c;
+				ifs.get(c);
+				p+=c;
+			}
 		}
 
 		auto t_before = high_resolution_clock::now();

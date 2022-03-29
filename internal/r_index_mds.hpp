@@ -55,10 +55,35 @@ public:
 	/*
 	 * Build index
 	 */
-	r_index_mds(string T, INT_T n, int p, int v = 3, INT_T a = 8, bool log = true, std::ofstream *measurement_file = NULL){
+	r_index_mds(string T, INT_T n, int p, int v = 3, INT_T a = 16, bool log = true, std::ofstream *measurement_file = NULL){
 		this->n = n;
 		this->a = a;
 		omp_set_num_threads(p);
+
+		char_shift = 0;
+		unsigned char min_char = 255;
+		unsigned char max_char = 0;
+		#pragma omp parallel for reduction(min:min_char) reduction(max:max_char)
+		for (INT_T i=0; i<n-1; i++) {
+			if ((unsigned char) T[i] < min_char) {
+				min_char = T[i];
+			}
+			if ((unsigned char) T[i] > max_char) {
+				max_char = T[i];
+			}
+		}
+		if (min_char < 2) {
+			if (max_char - min_char + 1 > 253) {
+				cout << "Error: the char range of the input string is too big (> 253)" << endl;
+				return;
+			} else {
+				char_shift = 2-min_char;
+				#pragma omp parallel for num_threads(p)
+				for (INT_T i=0; i<n; i++) {
+					T[i] += char_shift;
+				}
+			}
+		}
 
 		auto time = now();
 
@@ -297,6 +322,9 @@ public:
 	ulint serialize(std::ostream& out){
 		ulint w_bytes = 0;
 
+		out.write((char*)&char_shift,sizeof(unsigned char));
+		w_bytes += sizeof(unsigned char);
+
 		out.write((char*)&n,sizeof(INT_T));
 		w_bytes += sizeof(INT_T);
 
@@ -328,6 +356,8 @@ public:
 	 * \param in the istream
 	 */
 	void load(std::istream& in) {
+		in.read((char*)&char_shift,sizeof(unsigned char));
+
 		in.read((char*)&n,sizeof(INT_T));
 
 		in.read((char*)&r,sizeof(INT_T));
@@ -384,6 +414,10 @@ public:
 		return this->a;
 	}
 
+	unsigned char ret_char_shift() {
+		return char_shift;
+	}
+
 private:
 
 	huff_string bwt_rh;
@@ -395,6 +429,7 @@ private:
 	std::vector<INT_T> SA_sampl_idx;
 	mds<INT_T> mds_LF;
 	mds<INT_T> mds_phi;
+	unsigned char char_shift;
 };
 
 }
