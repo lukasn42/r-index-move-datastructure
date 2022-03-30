@@ -125,12 +125,11 @@ void count(std::ifstream& in, string patterns){
 
 		string p = string();
 
-		if (idx.ret_char_shift() != 0) {
-			unsigned char char_shift = idx.ret_char_shift();
+		if (idx.ret_chars_mapped()) {
 			for(ulint j=0;j<m;++j){
 				char c;
 				ifs.get(c);
-				p+=c+char_shift;
+				p+=idx.ret_map_char(c);
 			}
 		} else {
 			for(ulint j=0;j<m;++j){

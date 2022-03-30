@@ -60,29 +60,41 @@ public:
 		this->a = a;
 		omp_set_num_threads(p);
 
-		char_shift = 0;
-		unsigned char min_char = 255;
-		unsigned char max_char = 0;
-		#pragma omp parallel for reduction(min:min_char) reduction(max:max_char)
+		chars_mapped = false;
+		map_char = std::vector<unsigned char>(256,0);
+		#pragma omp parallel for num_threads(p)
 		for (INT_T i=0; i<n-1; i++) {
-			if ((unsigned char) T[i] < min_char) {
-				min_char = T[i];
-			}
-			if ((unsigned char) T[i] > max_char) {
-				max_char = T[i];
-			}
+			map_char[(unsigned char) T[i]] = 1;
 		}
-		if (min_char < 2) {
-			if (max_char - min_char + 1 > 253) {
-				cout << "Error: the char range of the input string is too big (> 253)" << endl;
+		if (map_char[0] || map_char[1]) {
+			uint8_t num_dist_chars = 0;
+			for (uint16_t i=0; i<256; i++) {
+				num_dist_chars += map_char[i];
+			}
+			if (num_dist_chars > 253) {
+				cout << "Error: the input contains more than 253 distinct characters" << endl;
 				return;
-			} else {
-				char_shift = 2-min_char;
-				#pragma omp parallel for num_threads(p)
-				for (INT_T i=0; i<n; i++) {
-					T[i] += char_shift;
+			}
+			chars_mapped = true;
+			map_char_rev = std::vector<unsigned char>(256,0);
+			uint8_t j = 2;
+			for (uint16_t i=0; i<256; i++) {
+				if (map_char[i] != 0) {
+					map_char[i] = j;
+					j++;
 				}
 			}
+			for (uint16_t i=0; i<256; i++) {
+				if (map_char[i] != 0) {
+					map_char_rev[map_char[i]] = i;
+				}
+			}
+			#pragma omp parallel for num_threads(p)
+			for (INT_T i=0; i<n-1; i++) {
+				T[i] = map_char[(unsigned char) T[i]];
+			}
+		} else {
+			map_char.clear();
 		}
 
 		auto time = now();
@@ -153,21 +165,21 @@ public:
 		}
 
 		if (log) cout << "building move datastructure for LF" << endl;
-		mds_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
-		r = mds_LF.intervals();
+		M_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
+		r = M_LF.intervals();
 
 		if (log) cout << "building phi-Array, SA-Samples and bwt runheads" << endl;
 		std::vector<std::pair<INT_T,INT_T>> *I_phi = new std::vector<std::pair<INT_T,INT_T>>(r);
-		SA_sampl = std::vector<INT_T>(r);
-		bwt_rh_s.resize(r);
+		SA_s = std::vector<INT_T>(r);
+		S_bwtr.resize(r);
 		I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
-		SA_sampl[r-1] = SA[n-1];
-		bwt_rh_s[0] = bwt[0];
+		SA_s[r-1] = SA[n-1];
+		S_bwtr[0] = bwt[0];
 		#pragma omp parallel for num_threads(p)
 		for (INT_T i=1; i<r; i++) {
-			I_phi->at(i) = std::make_pair(SA[mds_LF.pair(i).first],SA[mds_LF.pair(i).first-1]);
-			SA_sampl[i-1] = SA[mds_LF.pair(i).first-1];
-			bwt_rh_s[i] = bwt[mds_LF.pair(i).first];
+			I_phi->at(i) = std::make_pair(SA[M_LF.pair(i).first],SA[M_LF.pair(i).first-1]);
+			SA_s[i-1] = SA[M_LF.pair(i).first-1];
+			S_bwtr[i] = bwt[M_LF.pair(i).first];
 		}
 		bwt.clear();
 		SA.clear();
@@ -181,28 +193,28 @@ public:
 		}
 
 		if (log) cout << "builing move datastructure for phi" << endl;
-		mds_phi = mds<INT_T>(I_phi,n,a,p,v,measurement_file == NULL ? log : false);
+		M_phi = mds<INT_T>(I_phi,n,a,p,v,measurement_file == NULL ? log : false);
 		if (measurement_file != NULL) {
 			*measurement_file << " phase_3=" << time_diff_ms(time,now());
 			time = now();
 		}
 		
 		if (log) cout << "building SA-Sample indices" << endl;
-		SA_sampl_idx = std::vector<INT_T>(r);
+		SA_x = std::vector<INT_T>(r);
 		#pragma omp parallel for num_threads(p)
 		for (INT_T i=0; i<r; i++) {
 			INT_T b = 0;
-			INT_T e = mds_phi.intervals()-1;
+			INT_T e = M_phi.intervals()-1;
 			INT_T m;
 			while (b != e) {
 				m = (b+e)/2+1;
-				if (mds_phi.pair(m).first > SA_sampl[i]) {
+				if (M_phi.pair(m).first > SA_s[i]) {
 					e = m-1;
 				} else {
 					b = m;
 				}
 			}
-			SA_sampl_idx[i] = b;
+			SA_x[i] = b;
 		}
 		if (measurement_file != NULL) {
 			*measurement_file << " phase_4=" << time_diff_ms(time,now());
@@ -210,7 +222,7 @@ public:
 		}
 
 		if (log) cout << "buildung wavelet tree of bwt runheads" << endl;
-		bwt_rh = huff_string(bwt_rh_s);
+		W_bwtr = huff_string(S_bwtr);
 		if (measurement_file != NULL) {
 			*measurement_file << " phase_5=" << time_diff_ms(time,now());
 			time = now();
@@ -220,10 +232,10 @@ public:
 
 	void revert(string &text) {
 		std::pair<INT_T,INT_T> mp = std::make_pair(0,0);
-		text[n-2] = bwt_rh_s[mp.second];
+		text[n-2] = S_bwtr[mp.second];
 		for (INT_T i=n-3; i>=0; i--) {
-			mds_LF.move(mp);
-			text[i] = bwt_rh_s[mp.second];
+			M_LF.move(mp);
+			text[i] = S_bwtr[mp.second];
 		}
 	}
 
@@ -237,17 +249,17 @@ public:
 		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
 
 		for (INT_T i=m-1; i>=0; i--) {
-			if (P[i] != bwt_rh_s[mp_l.second]) {
-				mp_l.second = bwt_rh.select(bwt_rh.rank(mp_l.second,P[i])+1,P[i]);
-				mp_l.first = mds_LF.pair(mp_l.second).first;
+			if (P[i] != S_bwtr[mp_l.second]) {
+				mp_l.second = W_bwtr.select(W_bwtr.rank(mp_l.second,P[i])+1,P[i]);
+				mp_l.first = M_LF.pair(mp_l.second).first;
 			}
-			if (P[i] != bwt_rh_s[mp_r.second]) {
-				mp_r.second = bwt_rh.select(bwt_rh.rank(mp_r.second,P[i]),P[i]);
-				mp_r.first = mds_LF.pair(mp_r.second+1).first-1;
+			if (P[i] != S_bwtr[mp_r.second]) {
+				mp_r.second = W_bwtr.select(W_bwtr.rank(mp_r.second,P[i]),P[i]);
+				mp_r.first = M_LF.pair(mp_r.second+1).first-1;
 			}
 			if (mp_l.first <= mp_r.first) {
-				mds_LF.move(mp_l);
-				mds_LF.move(mp_r);
+				M_LF.move(mp_l);
+				M_LF.move(mp_r);
 			} else {
 				return {1,0};
 			}
@@ -278,24 +290,24 @@ public:
 
 		std::pair<INT_T,INT_T> mp_l(0,0);
 		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
-		std::pair<INT_T,INT_T> mp_sa_r(SA_sampl[r-1],SA_sampl_idx[r-1]);
+		std::pair<INT_T,INT_T> mp_sa_r(SA_s[r-1],SA_x[r-1]);
 
 		for (INT_T i=m-1; i>=0; i--) {
-			if (P[i] != bwt_rh_s[mp_l.second]) {
-				mp_l.second = bwt_rh.select(bwt_rh.rank(mp_l.second,P[i])+1,P[i]);
-				mp_l.first = mds_LF.pair(mp_l.second).first;
+			if (P[i] != S_bwtr[mp_l.second]) {
+				mp_l.second = W_bwtr.select(W_bwtr.rank(mp_l.second,P[i])+1,P[i]);
+				mp_l.first = M_LF.pair(mp_l.second).first;
 			}
-			if (P[i] != bwt_rh_s[mp_r.second]) {
-				mp_r.second = bwt_rh.select(bwt_rh.rank(mp_r.second,P[i]),P[i]);
-				mp_r.first = mds_LF.pair(mp_r.second+1).first-1;
-				mp_sa_r.first = SA_sampl[mp_r.second];
-				mp_sa_r.second = SA_sampl_idx[mp_r.second];
+			if (P[i] != S_bwtr[mp_r.second]) {
+				mp_r.second = W_bwtr.select(W_bwtr.rank(mp_r.second,P[i]),P[i]);
+				mp_r.first = M_LF.pair(mp_r.second+1).first-1;
+				mp_sa_r.first = SA_s[mp_r.second];
+				mp_sa_r.second = SA_x[mp_r.second];
 			}
 			if (mp_l.first <= mp_r.first) {
-				mds_LF.move(mp_l);
-				mds_LF.move(mp_r);
+				M_LF.move(mp_l);
+				M_LF.move(mp_r);
 				mp_sa_r.first--;
-				if (mp_sa_r.first < mds_phi.pair(mp_sa_r.second).first) {
+				if (mp_sa_r.first < M_phi.pair(mp_sa_r.second).first) {
 					mp_sa_r.second--;
 				}
 			} else {
@@ -303,17 +315,17 @@ public:
 			}
 		}
 
-		vector<ulint> occ(mp_r.first-mp_l.first+1);
+		vector<ulint> Occ(mp_r.first-mp_l.first+1);
 
-		if (!occ.empty()) {
-			occ[0] = mp_sa_r.first;
-			for (INT_T i=1; i<occ.size(); i++) {
-				mds_phi.move(mp_sa_r);
-				occ[i] = mp_sa_r.first;
+		if (!Occ.empty()) {
+			Occ[0] = mp_sa_r.first;
+			for (INT_T i=1; i<Occ.size(); i++) {
+				M_phi.move(mp_sa_r);
+				Occ[i] = mp_sa_r.first;
 			}
 		}
 
-		return occ;
+		return Occ;
 	}
 
 	/* serialize the structure to the ostream
@@ -322,8 +334,16 @@ public:
 	ulint serialize(std::ostream& out){
 		ulint w_bytes = 0;
 
-		out.write((char*)&char_shift,sizeof(unsigned char));
-		w_bytes += sizeof(unsigned char);
+		out.write((char*)&chars_mapped,sizeof(bool));
+		w_bytes += sizeof(bool);
+
+		if (chars_mapped) {
+			out.write((char*)&map_char[0],256*sizeof(unsigned char));
+			w_bytes += 256*sizeof(unsigned char);
+
+			out.write((char*)&map_char_rev[0],256*sizeof(unsigned char));
+			w_bytes += 256*sizeof(unsigned char);
+		}
 
 		out.write((char*)&n,sizeof(INT_T));
 		w_bytes += sizeof(INT_T);
@@ -334,20 +354,20 @@ public:
 		out.write((char*)&a,sizeof(INT_T));
 		w_bytes += sizeof(INT_T);
 
-		w_bytes += bwt_rh.serialize(out);
+		w_bytes += W_bwtr.serialize(out);
 
-		out.write((char*)&bwt_rh_s[0],r);
+		out.write((char*)&S_bwtr[0],r);
 		w_bytes += r;
 
-		out.write((char*)&SA_sampl[0],r*sizeof(INT_T));
+		out.write((char*)&SA_s[0],r*sizeof(INT_T));
 		w_bytes += r*sizeof(INT_T);
 
-		out.write((char*)&SA_sampl_idx[0],r*sizeof(INT_T));
+		out.write((char*)&SA_x[0],r*sizeof(INT_T));
 		w_bytes += r*sizeof(INT_T);
 
-		w_bytes += mds_LF.serialize(out);
+		w_bytes += M_LF.serialize(out);
 		
-		w_bytes += mds_phi.serialize(out);
+		w_bytes += M_phi.serialize(out);
 
 		return w_bytes;
 	}
@@ -356,7 +376,15 @@ public:
 	 * \param in the istream
 	 */
 	void load(std::istream& in) {
-		in.read((char*)&char_shift,sizeof(unsigned char));
+		in.read((char*)&chars_mapped,sizeof(bool));
+
+		if (chars_mapped) {
+			map_char = std::vector<unsigned char>(256);
+			in.read((char*)&map_char[0],256*sizeof(unsigned char));
+
+			map_char_rev = std::vector<unsigned char>(256);
+			in.read((char*)&map_char_rev[0],256*sizeof(unsigned char));
+		}
 
 		in.read((char*)&n,sizeof(INT_T));
 
@@ -364,20 +392,20 @@ public:
 
 		in.read((char*)&a,sizeof(INT_T));
 
-		bwt_rh.load(in);
+		W_bwtr.load(in);
 
-		bwt_rh_s.resize(r);
-		in.read((char*)&bwt_rh_s[0],r);
+		S_bwtr.resize(r);
+		in.read((char*)&S_bwtr[0],r);
 
-		SA_sampl = std::vector<INT_T>(r);
-		in.read((char*)&SA_sampl[0],r*sizeof(INT_T));
+		SA_s = std::vector<INT_T>(r);
+		in.read((char*)&SA_s[0],r*sizeof(INT_T));
 
-		SA_sampl_idx = std::vector<INT_T>(r);
-		in.read((char*)&SA_sampl_idx[0],r*sizeof(INT_T));
+		SA_x = std::vector<INT_T>(r);
+		in.read((char*)&SA_x[0],r*sizeof(INT_T));
 
-		mds_LF = mds<INT_T>(in);
+		M_LF = mds<INT_T>(in);
 
-		mds_phi = mds<INT_T>(in);
+		M_phi = mds<INT_T>(in);
 	}
 
 	/*
@@ -414,22 +442,31 @@ public:
 		return this->a;
 	}
 
-	unsigned char ret_char_shift() {
-		return char_shift;
+	bool ret_chars_mapped() {
+		return chars_mapped;
+	}
+
+	unsigned char ret_map_char(unsigned char c) {
+		return map_char[c];
+	}
+
+	unsigned char ret_map_char_rev(unsigned char c) {
+		return map_char_rev[c];
 	}
 
 private:
 
-	huff_string bwt_rh;
-	string bwt_rh_s;
+	huff_string W_bwtr;
+	string S_bwtr;
 	INT_T n;
 	INT_T r;
 	INT_T a;
-	std::vector<INT_T> SA_sampl;
-	std::vector<INT_T> SA_sampl_idx;
-	mds<INT_T> mds_LF;
-	mds<INT_T> mds_phi;
-	unsigned char char_shift;
+	std::vector<INT_T> SA_s;
+	std::vector<INT_T> SA_x;
+	mds<INT_T> M_LF;
+	mds<INT_T> M_phi;
+	bool chars_mapped;
+	std::vector<unsigned char> map_char,map_char_rev;
 };
 
 }

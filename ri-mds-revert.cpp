@@ -116,10 +116,9 @@ void revert(std::ifstream& in){
 		measurement_file << " time=" << revert << endl;
 	}
 
-	if (idx.ret_char_shift() != 0) {
-		unsigned char char_shift = idx.ret_char_shift();
-		for (uint64_t i=0; i<text_orig.size(); i++) {
-			text_orig[i]-=char_shift;
+	if (idx.ret_chars_mapped()) {
+		for (ulint i=0; i<text_orig.size(); i++) {
+			text_orig[i] = idx.ret_map_char_rev(text_orig[i]);
 		}
 	}
 
