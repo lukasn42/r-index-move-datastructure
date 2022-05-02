@@ -156,6 +156,7 @@ public:
 				I_LF->emplace_back(std::make_pair(i,C[c]+C_[c]));
 			}
 		}
+		r = I_LF->size();
 		I_LF->shrink_to_fit();
 		C.clear();
 		C_.clear();
@@ -164,25 +165,12 @@ public:
 			time = now();
 		}
 
-		if (log) cout << "building move datastructure for LF" << endl;
-		M_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
-		r = M_LF.intervals();
-
-		if (log) cout << "building phi-Array, SA-Samples and bwt runheads" << endl;
+		if (log) cout << "building phi-Array" << endl;
 		std::vector<std::pair<INT_T,INT_T>> *I_phi = new std::vector<std::pair<INT_T,INT_T>>(r);
-		SA_s = std::vector<INT_T>(r);
-		S_bwtr.resize(r);
 		I_phi->at(0) = std::make_pair(SA[0],SA[n-1]);
-		SA_s[r-1] = SA[n-1];
-		S_bwtr[0] = bwt[0];
-		#pragma omp parallel for num_threads(p)
 		for (INT_T i=1; i<r; i++) {
-			I_phi->at(i) = std::make_pair(SA[M_LF.pair(i).first],SA[M_LF.pair(i).first-1]);
-			SA_s[i-1] = SA[M_LF.pair(i).first-1];
-			S_bwtr[i] = bwt[M_LF.pair(i).first];
+			I_phi->at(i) = std::make_pair(SA[I_LF->at(i).first],SA[I_LF->at(i).first-1]);
 		}
-		bwt.clear();
-		SA.clear();
 
 		if (log) cout << "sorting phi-Array" << endl;
 		auto comp = [](auto p1, auto p2){return p1.first < p2.first;};
@@ -192,6 +180,23 @@ public:
 			ips4o::sort(I_phi->begin(),I_phi->end(),comp);
 		}
 
+		if (log) cout << "building move datastructure for LF" << endl;
+		M_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
+		r_ = M_LF.intervals();
+
+		if (log) cout << "SA-Samples and bwt runheads" << endl;
+		SA_s = std::vector<INT_T>(r_);
+		S_bwtr.resize(r_);
+		SA_s[r_-1] = SA[n-1];
+		S_bwtr[0] = bwt[0];
+		#pragma omp parallel for num_threads(p)
+		for (INT_T i=1; i<r_; i++) {
+			SA_s[i-1] = SA[M_LF.pair(i).first-1];
+			S_bwtr[i] = bwt[M_LF.pair(i).first];
+		}
+		bwt.clear();
+		SA.clear();
+
 		if (log) cout << "builing move datastructure for phi" << endl;
 		M_phi = mds<INT_T>(I_phi,n,a,p,v,measurement_file == NULL ? log : false);
 		if (measurement_file != NULL) {
@@ -200,9 +205,9 @@ public:
 		}
 		
 		if (log) cout << "building SA-Sample indices" << endl;
-		SA_x = std::vector<INT_T>(r);
+		SA_x = std::vector<INT_T>(r_);
 		#pragma omp parallel for num_threads(p)
-		for (INT_T i=0; i<r; i++) {
+		for (INT_T i=0; i<r_; i++) {
 			INT_T b = 0;
 			INT_T e = M_phi.intervals()-1;
 			INT_T m;
@@ -246,7 +251,7 @@ public:
 		INT_T m = P.size();
 
 		std::pair<INT_T,INT_T> mp_l(0,0);
-		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
+		std::pair<INT_T,INT_T> mp_r(n-1,r_-1);
 
 		for (INT_T i=m-1; i>=0; i--) {
 			if (P[i] != S_bwtr[mp_l.second]) {
@@ -289,8 +294,8 @@ public:
 		INT_T m = P.size();
 
 		std::pair<INT_T,INT_T> mp_l(0,0);
-		std::pair<INT_T,INT_T> mp_r(n-1,r-1);
-		std::pair<INT_T,INT_T> mp_sa_r(SA_s[r-1],SA_x[r-1]);
+		std::pair<INT_T,INT_T> mp_r(n-1,r_-1);
+		std::pair<INT_T,INT_T> mp_sa_r(0,r_-1);
 
 		for (INT_T i=m-1; i>=0; i--) {
 			if (P[i] != S_bwtr[mp_l.second]) {
@@ -300,19 +305,22 @@ public:
 			if (P[i] != S_bwtr[mp_r.second]) {
 				mp_r.second = W_bwtr.select(W_bwtr.rank(mp_r.second,P[i]),P[i]);
 				mp_r.first = M_LF.pair(mp_r.second+1).first-1;
-				mp_sa_r.first = SA_s[mp_r.second];
-				mp_sa_r.second = SA_x[mp_r.second];
+				mp_sa_r = std::make_pair(0,mp_r.second);
 			}
 			if (mp_l.first <= mp_r.first) {
 				M_LF.move(mp_l);
 				M_LF.move(mp_r);
 				mp_sa_r.first--;
-				if (mp_sa_r.first < M_phi.pair(mp_sa_r.second).first) {
-					mp_sa_r.second--;
-				}
 			} else {
 				return vector<ulint>(0);
 			}
+		}
+
+		mp_sa_r.first += SA_s[mp_sa_r.second];
+		mp_sa_r.second = SA_x[mp_sa_r.second];
+
+		while (mp_sa_r.first < M_phi.pair(mp_sa_r.second).first) {
+			mp_sa_r.second--;
 		}
 
 		vector<ulint> Occ(mp_r.first-mp_l.first+1);
@@ -351,19 +359,22 @@ public:
 		out.write((char*)&r,sizeof(INT_T));
 		w_bytes += sizeof(INT_T);
 
+		out.write((char*)&r_,sizeof(INT_T));
+		w_bytes += sizeof(INT_T);
+
 		out.write((char*)&a,sizeof(INT_T));
 		w_bytes += sizeof(INT_T);
 
 		w_bytes += W_bwtr.serialize(out);
 
-		out.write((char*)&S_bwtr[0],r);
-		w_bytes += r;
+		out.write((char*)&S_bwtr[0],r_);
+		w_bytes += r_;
 
-		out.write((char*)&SA_s[0],r*sizeof(INT_T));
-		w_bytes += r*sizeof(INT_T);
+		out.write((char*)&SA_s[0],r_*sizeof(INT_T));
+		w_bytes += r_*sizeof(INT_T);
 
-		out.write((char*)&SA_x[0],r*sizeof(INT_T));
-		w_bytes += r*sizeof(INT_T);
+		out.write((char*)&SA_x[0],r_*sizeof(INT_T));
+		w_bytes += r_*sizeof(INT_T);
 
 		w_bytes += M_LF.serialize(out);
 		
@@ -390,18 +401,20 @@ public:
 
 		in.read((char*)&r,sizeof(INT_T));
 
+		in.read((char*)&r_,sizeof(INT_T));
+
 		in.read((char*)&a,sizeof(INT_T));
 
 		W_bwtr.load(in);
 
-		S_bwtr.resize(r);
-		in.read((char*)&S_bwtr[0],r);
+		S_bwtr.resize(r_);
+		in.read((char*)&S_bwtr[0],r_);
 
-		SA_s = std::vector<INT_T>(r);
-		in.read((char*)&SA_s[0],r*sizeof(INT_T));
+		SA_s = std::vector<INT_T>(r_);
+		in.read((char*)&SA_s[0],r_*sizeof(INT_T));
 
-		SA_x = std::vector<INT_T>(r);
-		in.read((char*)&SA_x[0],r*sizeof(INT_T));
+		SA_x = std::vector<INT_T>(r_);
+		in.read((char*)&SA_x[0],r_*sizeof(INT_T));
 
 		M_LF = mds<INT_T>(in);
 
@@ -460,6 +473,7 @@ private:
 	string S_bwtr;
 	INT_T n;
 	INT_T r;
+	INT_T r_;
 	INT_T a;
 	std::vector<INT_T> SA_s;
 	std::vector<INT_T> SA_x;
