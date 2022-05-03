@@ -184,14 +184,14 @@ public:
 		M_LF = mds<INT_T>(I_LF,n,a,p,v,measurement_file == NULL ? log : false);
 		r_ = M_LF.intervals();
 
-		if (log) cout << "SA-Samples and bwt runheads" << endl;
-		SA_s = std::vector<INT_T>(r_);
+		if (log) cout << "building SA-Samples and bwt runheads" << endl;
+		SA_sx = std::vector<std::pair<INT_T,INT_T>>(r_);
 		S_bwtr.resize(r_);
-		SA_s[r_-1] = SA[n-1];
+		SA_sx[r_-1].first = SA[n-1];
 		S_bwtr[0] = bwt[0];
 		#pragma omp parallel for num_threads(p)
 		for (INT_T i=1; i<r_; i++) {
-			SA_s[i-1] = SA[M_LF.pair(i).first-1];
+			SA_sx[i-1].first = SA[M_LF.pair(i).first-1];
 			S_bwtr[i] = bwt[M_LF.pair(i).first];
 		}
 		bwt.clear();
@@ -205,7 +205,6 @@ public:
 		}
 		
 		if (log) cout << "building SA-Sample indices" << endl;
-		SA_x = std::vector<INT_T>(r_);
 		#pragma omp parallel for num_threads(p)
 		for (INT_T i=0; i<r_; i++) {
 			INT_T b = 0;
@@ -213,13 +212,13 @@ public:
 			INT_T m;
 			while (b != e) {
 				m = (b+e)/2+1;
-				if (M_phi.pair(m).first > SA_s[i]) {
+				if (M_phi.pair(m).first > SA_sx[i].first) {
 					e = m-1;
 				} else {
 					b = m;
 				}
 			}
-			SA_x[i] = b;
+			SA_sx[i].second = b;
 		}
 		if (measurement_file != NULL) {
 			*measurement_file << " phase_4=" << time_diff_ms(time,now());
@@ -316,21 +315,19 @@ public:
 			}
 		}
 
-		mp_sa_r.first += SA_s[mp_sa_r.second];
-		mp_sa_r.second = SA_x[mp_sa_r.second];
+		mp_sa_r.first += SA_sx[mp_sa_r.second].first;
+		mp_sa_r.second = SA_sx[mp_sa_r.second].second;
 
 		while (mp_sa_r.first < M_phi.pair(mp_sa_r.second).first) {
 			mp_sa_r.second--;
 		}
 
 		vector<ulint> Occ(mp_r.first-mp_l.first+1);
-
-		if (!Occ.empty()) {
-			Occ[0] = mp_sa_r.first;
-			for (INT_T i=1; i<Occ.size(); i++) {
-				M_phi.move(mp_sa_r);
-				Occ[i] = mp_sa_r.first;
-			}
+		
+		Occ[0] = mp_sa_r.first;
+		for (INT_T i=1; i<Occ.size(); i++) {
+			M_phi.move(mp_sa_r);
+			Occ[i] = mp_sa_r.first;
 		}
 
 		return Occ;
@@ -370,11 +367,8 @@ public:
 		out.write((char*)&S_bwtr[0],r_);
 		w_bytes += r_;
 
-		out.write((char*)&SA_s[0],r_*sizeof(INT_T));
-		w_bytes += r_*sizeof(INT_T);
-
-		out.write((char*)&SA_x[0],r_*sizeof(INT_T));
-		w_bytes += r_*sizeof(INT_T);
+		out.write((char*)&SA_sx[0],2*r_*sizeof(INT_T));
+		w_bytes += 2*r_*sizeof(INT_T);;
 
 		w_bytes += M_LF.serialize(out);
 		
@@ -410,11 +404,8 @@ public:
 		S_bwtr.resize(r_);
 		in.read((char*)&S_bwtr[0],r_);
 
-		SA_s = std::vector<INT_T>(r_);
-		in.read((char*)&SA_s[0],r_*sizeof(INT_T));
-
-		SA_x = std::vector<INT_T>(r_);
-		in.read((char*)&SA_x[0],r_*sizeof(INT_T));
+		SA_sx = std::vector<std::pair<INT_T,INT_T>>(r_);
+		in.read((char*)&SA_sx[0],2*r_*sizeof(INT_T));
 
 		M_LF = mds<INT_T>(in);
 
@@ -475,8 +466,7 @@ private:
 	INT_T r;
 	INT_T r_;
 	INT_T a;
-	std::vector<INT_T> SA_s;
-	std::vector<INT_T> SA_x;
+	std::vector<std::pair<INT_T,INT_T>> SA_sx;
 	mds<INT_T> M_LF;
 	mds<INT_T> M_phi;
 	bool chars_mapped;
